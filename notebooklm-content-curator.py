@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
 """
-NotebookLM Content Curator
+NotebookLM Content Curator v0.1.2
 Syncs tagged markdown files to a Google Doc for use as NotebookLM sources.
 
 Each tagged file is written to its own tab in the Google Doc. The script tracks
 what has already been synced using a local registry file and only updates tabs
-whose file content has changed (detected by hash, not timestamp). New tabs are
-created automatically when needed.
+whose file content has changed (detected by hash). New tabs are created
+automatically when needed.
 
 Usage:
-    python3 notebooklm-content-curator.py [--dry-run] [--dir PATH]
+    python3 notebooklm-content-curator.py [--dry-run] [--dir PATH] [--tag TAG] [--file DOC_NAME]
 
 Options:
-    --dry-run   Preview what would change without writing to Google Docs or the registry.
-    --dir PATH  Directory to scan for tagged markdown files (default: current directory).
+    --dry-run, --preview  Preview what would change without writing anything.
+    --dir PATH            Directory to scan for tagged markdown files (default: current directory).
+    --tag TAG             Frontmatter tag to look for (required).
+    --file DOC_NAME       Name of the Google Doc to sync to (required).
+    --version             Print the version number and exit.
 
 Setup:
     1. Install dependencies:
@@ -34,11 +37,12 @@ Tagging files:
         tags:
           - notebooklm-source
         ---
+    Use --tag to specify a different tag if needed.
 
 Security notes:
     - Token is stored as JSON (not pickle) with 0o600 permissions.
     - Symlinks inside the scanned directory are skipped.
-    - Files larger than 1 MB are skipped.
+    - Files larger than 5 MB are skipped.
     - The Drive search query is escaped to prevent injection via doc names.
 """
 
@@ -54,11 +58,11 @@ from typing import Optional
 
 # ── Google API imports ──────────────────────────────────────────────────────
 try:
-    from google.auth.transport.requests import Request
-    from google.oauth2.credentials import Credentials
-    from google_auth_oauthlib.flow import InstalledAppFlow
-    from googleapiclient.discovery import build
-    from googleapiclient.errors import HttpError
+    from google.auth.transport.requests import Request  # type: ignore
+    from google.oauth2.credentials import Credentials  # type: ignore
+    from google_auth_oauthlib.flow import InstalledAppFlow  # type: ignore
+    from googleapiclient.discovery import build  # type: ignore
+    from googleapiclient.errors import HttpError  # type: ignore
 except ImportError:
     print("Missing dependencies. Install with:")
     print("  pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client pyyaml")
@@ -75,13 +79,13 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 REGISTRY_FILENAME = "notebooklm-registry.json"
 TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.json"
 _LEGACY_TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.pickle"
 CREDENTIALS_PATH = Path.home() / ".config" / "notebooklm-curator" / "credentials.json"
 NOTEBOOKLM_TAG = "notebooklm-source"
-MAX_FILE_BYTES = 1 * 1024 * 1024  # 1 MB — Google Docs API batchUpdate limit
+MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MB — Google Docs API batchUpdate limit
 
 
 # ── Authentication ───────────────────────────────────────────────────────────
@@ -568,12 +572,12 @@ def main() -> None:
         help="Directory to scan (default: current directory).",
     )
     parser.add_argument(
-        "--tag", default=NOTEBOOKLM_TAG, metavar="TAG",
-        help=f"Frontmatter tag to look for (default: {NOTEBOOKLM_TAG}).",
+        "--tag", required=True, metavar="TAG",
+        help="Frontmatter tag to look for.",
     )
     parser.add_argument(
-        "--file", default=None, metavar="DOC_NAME", dest="doc_name",
-        help="Name of the Google Doc to sync to (overrides registry value).",
+        "--file", required=True, metavar="DOC_NAME", dest="doc_name",
+        help="Name of the Google Doc to sync to.",
     )
     args = parser.parse_args()
 

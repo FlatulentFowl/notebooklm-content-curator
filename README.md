@@ -84,18 +84,15 @@ Files without the tag are ignored entirely. The YAML frontmatter block itself is
 python3 notebooklm-content-curator.py --version
 
 # Preview what would change in the current directory
-python3 notebooklm-content-curator.py --dry-run
+python3 notebooklm-content-curator.py --tag notebooklm-source --file "my-notebooklm-doc" --dry-run
 
-# Sync the current directory to a Google Doc
-python3 notebooklm-content-curator.py --file "my-notebooklm-doc"
+# Sync the current directory
+python3 notebooklm-content-curator.py --tag notebooklm-source --file "my-notebooklm-doc"
 
-# Sync a specific folder to a Google Doc
-python3 notebooklm-content-curator.py --dir ~/notes --file "my-notebooklm-doc"
+# Sync a specific folder
+python3 notebooklm-content-curator.py --dir ~/notes --tag notebooklm-source --file "my-notebooklm-doc"
 
-# Sync files with a custom tag
-python3 notebooklm-content-curator.py --dir ~/notes --tag research --file "research-doc"
-
-# Combine all options
+# Sync with a custom tag
 python3 notebooklm-content-curator.py --dir ~/notes --tag research --file "research-notebooklm" --dry-run
 ```
 
@@ -104,14 +101,14 @@ python3 notebooklm-content-curator.py --dir ~/notes --tag research --file "resea
 | Switch | Default | Description |
 |---|---|---|
 | `--dir PATH` | current directory | Directory to scan recursively for tagged markdown files |
-| `--tag TAG` | `notebooklm-source` | Frontmatter tag to look for |
-| `--file DOC_NAME` | *(from registry)* | Name of the Google Doc to sync to |
+| `--tag TAG` | *(required)* | Frontmatter tag to look for |
+| `--file DOC_NAME` | *(required)* | Name of the Google Doc to sync to |
 | `--dry-run` / `--preview` | off | Preview changes without writing anything |
 | `--version` | — | Print the version number and exit |
 
 ### `--tag`
 
-By default the script looks for files tagged `notebooklm-source`. Use `--tag` to target a different tag — useful when you have multiple workflows or vaults with different tagging conventions.
+Required. Specifies which frontmatter tag to look for. Useful when you have multiple workflows or vaults with different tagging conventions.
 
 ```yaml
 # This file is picked up with --tag research
@@ -127,15 +124,13 @@ python3 notebooklm-content-curator.py --dir ~/notes/research --tag research --fi
 
 ### `--file`
 
-By default the target Google Doc name is read from `notebooklm-registry.json`. Use `--file` to override this without editing the registry — useful when syncing different directories to different docs.
+Required. Specifies the name of the Google Doc to sync to.
 
 ```bash
 # Sync two separate vaults to two separate docs
-python3 notebooklm-content-curator.py --dir ~/notes/project-a --file "project-a-notebooklm"
-python3 notebooklm-content-curator.py --dir ~/notes/project-b --file "project-b-notebooklm"
+python3 notebooklm-content-curator.py --dir ~/notes/project-a --tag project-a --file "project-a-notebooklm"
+python3 notebooklm-content-curator.py --dir ~/notes/project-b --tag project-b --file "project-b-notebooklm"
 ```
-
-> **Note:** `--file` always looks up the doc by name, ignoring any cached doc ID in the registry.
 
 ---
 
@@ -181,7 +176,7 @@ The script creates `notebooklm-registry.json` in the scanned directory. It track
 | Not enough empty tabs in the doc | New tabs created automatically |
 | Tag removed from a file | Warning printed, tab left intact — no automatic deletion |
 | File deleted from disk | Warning printed, tab left intact |
-| File larger than 1 MB | Skipped with a warning |
+| File larger than 5 MB | Skipped with a warning |
 | Symlinks in the scanned directory | Skipped |
 | Registry exists but doc was recreated | Integrity check surfaces mismatches as warnings |
 | Corrupt registry file | Warning printed, registry starts fresh |
@@ -203,9 +198,28 @@ python3 notebooklm-content-curator.py --dir ~/work/project-b --file "project-b-n
 
 ---
 
+## Changelog
+
+### v0.1.2
+- Increased file size limit from 1 MB to 5 MB
+- `--tag` is now a required argument (no longer defaults to `notebooklm-source`)
+- `--file` is now a required argument (no longer read from registry)
+
+### v0.1.1
+- Added `--tag` switch to specify which frontmatter tag to look for
+- Added `--file` switch to specify the target Google Doc by name
+- Added `--dir` switch to specify the directory to scan
+- Added `--dry-run` / `--preview` switch to preview changes without writing anything
+- Added `--version` switch to print the version number
+
+### v0.1.0
+- Initial release
+
+---
+
 ## Security
 
 - OAuth token is stored as JSON with `0o600` permissions (owner-readable only)
 - Symlinks inside the scanned directory are skipped to prevent reading files outside it
-- Files larger than 1 MB are skipped
+- Files larger than 5 MB are skipped
 - The Google Drive search query is escaped to handle special characters in doc names
