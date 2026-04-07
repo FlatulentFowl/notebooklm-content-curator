@@ -1,4 +1,4 @@
-# NotebookLM Content Curator `v0.1.0`
+# NotebookLM Content Curator `v0.1.1`
 
 Syncs tagged markdown files from any folder into a Google Doc, so they can be used as sources in [NotebookLM](https://notebooklm.google.com).
 
