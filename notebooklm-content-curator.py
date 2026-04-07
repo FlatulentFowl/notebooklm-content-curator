@@ -1,16 +1,45 @@
 #!/usr/bin/env python3
 """
-NotebookLM Source Curator
+NotebookLM Content Curator
 Syncs tagged markdown files to a Google Doc for use as NotebookLM sources.
 
+Each tagged file is written to its own tab in the Google Doc. The script tracks
+what has already been synced using a local registry file and only updates tabs
+whose file content has changed (detected by hash, not timestamp). New tabs are
+created automatically when needed.
+
 Usage:
-    python notebooklm_sync.py [--dry-run] [--dir PATH]
+    python3 notebooklm-content-curator.py [--dry-run] [--dir PATH]
+
+Options:
+    --dry-run   Preview what would change without writing to Google Docs or the registry.
+    --dir PATH  Directory to scan for tagged markdown files (default: test).
 
 Setup:
-    1. Enable Google Docs API and Drive API in Google Cloud Console
-    2. Create OAuth2 credentials (Desktop App type)
-    3. Download credentials JSON to: ~/.config/notebooklm-curator/credentials.json
-    4. pip install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client pyyaml
+    1. Install dependencies:
+           pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client pyyaml
+    2. Create OAuth2 credentials (one-time):
+           a. Go to https://console.cloud.google.com and sign in with your Google account
+           b. Create a project (any name)
+           c. Enable the Google Docs API and Google Drive API
+           d. Go to APIs & Services → Credentials → Create Credentials → OAuth client ID
+           e. Choose Desktop app, download the JSON
+           f. Save it to: ~/.config/notebooklm-curator/credentials.json
+    3. On first run a browser window opens — sign in and grant access.
+       The token is cached at ~/.config/notebooklm-curator/token.json (owner-read only).
+
+Tagging files:
+    Add a YAML frontmatter block to any .md file you want synced:
+        ---
+        tags:
+          - notebooklm-source
+        ---
+
+Security notes:
+    - Token is stored as JSON (not pickle) with 0o600 permissions.
+    - Symlinks inside the scanned directory are skipped.
+    - Files larger than 1 MB are skipped.
+    - The Drive search query is escaped to prevent injection via doc names.
 """
 
 import argparse
@@ -46,6 +75,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
+VERSION = "0.1.0"
 REGISTRY_FILENAME = "notebooklm-registry.json"
 TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.json"
 _LEGACY_TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.pickle"
@@ -159,24 +189,23 @@ def strip_frontmatter(content: str) -> str:
     return _FRONTMATTER_RE.sub("", content, count=1).lstrip("\n")
 
 
-def has_notebooklm_tag(frontmatter: dict) -> bool:
+def has_tag(frontmatter: dict, tag: str) -> bool:
     """
-    Return True when the frontmatter marks the file as a NotebookLM source.
+    Return True when the frontmatter contains the given tag.
 
     Accepted forms:
-        tags: [notebooklm-source, ...]       # list
+        tags: [my-tag, ...]       # list
         tags:
-          - notebooklm-source                # block list
-        notebooklm-source: true              # standalone boolean key
+          - my-tag                # block list
+        my-tag: true              # standalone boolean key
     """
     tags = frontmatter.get("tags")
     if tags is not None:
         if isinstance(tags, list):
-            return NOTEBOOKLM_TAG in [str(t) for t in tags]
+            return tag in [str(t) for t in tags]
         if isinstance(tags, str):
-            return tags == NOTEBOOKLM_TAG
-    # Also accept a bare `notebooklm-source: true` key
-    return bool(frontmatter.get(NOTEBOOKLM_TAG))
+            return tags == tag
+    return bool(frontmatter.get(tag))
 
 
 def derive_title(file_path: Path, content: str) -> str:
@@ -191,8 +220,8 @@ def file_hash(content: str) -> str:
     return hashlib.sha256(content.encode("utf-8")).hexdigest()[:16]
 
 
-def scan_tagged_files(cwd: Path) -> list[dict]:
-    """Return metadata for all .md files whose YAML frontmatter includes the notebooklm-source tag."""
+def scan_tagged_files(cwd: Path, tag: str) -> list[dict]:
+    """Return metadata for all .md files whose YAML frontmatter includes the given tag."""
     results = []
     for md_path in sorted(cwd.rglob("*.md")):
         # Skip symlinks — they could point to sensitive files outside the directory.
@@ -211,7 +240,7 @@ def scan_tagged_files(cwd: Path) -> list[dict]:
         except OSError:
             continue
         frontmatter = parse_frontmatter(content)
-        if not has_notebooklm_tag(frontmatter):
+        if not has_tag(frontmatter, tag):
             continue
         results.append(
             {
@@ -368,29 +397,13 @@ def insert_into_tab(docs_svc, doc_id: str, tab_id: str, content: str) -> None:
     ).execute()
 
 
-def rename_tab(docs_svc, doc_id: str, tab_id: str, new_title: str) -> None:
-    """Rename a tab. Silently skips if the API does not support it."""
-    try:
-        docs_svc.documents().batchUpdate(
-            documentId=doc_id,
-            body={
-                "requests": [
-                    {
-                        "updateDocumentTab": {
-                            "tabId": tab_id,
-                            "documentTab": {
-                                "tabProperties": {
-                                    "title": new_title,
-                                }
-                            },
-                            "fields": "tabProperties.title",
-                        }
-                    }
-                ]
-            },
-        ).execute()
-    except HttpError:
-        print(f"    (Tab rename not supported by API — tab title left as-is)")
+
+def create_tab(docs_svc, doc_id: str) -> None:
+    """Add a new empty tab to the document."""
+    docs_svc.documents().batchUpdate(
+        documentId=doc_id,
+        body={"requests": [{"createTab": {}}]},
+    ).execute()
 
 
 def fetch_fresh_doc(docs_svc, doc_id: str) -> dict:
@@ -544,12 +557,23 @@ def main() -> None:
         description="Sync tagged markdown files to a Google Doc for NotebookLM."
     )
     parser.add_argument(
+        "--version", action="version", version=f"%(prog)s {VERSION}",
+    )
+    parser.add_argument(
         "--dry-run", "--preview", action="store_true", dest="dry_run",
         help="Show what would change without touching the Google Doc or registry.",
     )
     parser.add_argument(
         "--dir", default="test", metavar="PATH",
         help="Directory to scan (default: test).",
+    )
+    parser.add_argument(
+        "--tag", default=NOTEBOOKLM_TAG, metavar="TAG",
+        help=f"Frontmatter tag to look for (default: {NOTEBOOKLM_TAG}).",
+    )
+    parser.add_argument(
+        "--file", default=None, metavar="DOC_NAME", dest="doc_name",
+        help="Name of the Google Doc to sync to (overrides registry value).",
     )
     args = parser.parse_args()
 
@@ -560,13 +584,18 @@ def main() -> None:
     print("\n[1/8] Loading registry…")
     registry = load_registry(cwd)
 
+    # Apply --file override before any doc lookup
+    if args.doc_name:
+        registry["google_doc_name"] = args.doc_name
+        registry["google_doc_id"] = None  # force re-lookup by name
+
     # ── Step 2: Scan files ───────────────────────────────────────────────────
     print("[2/8] Scanning for tagged markdown files…")
-    tagged_files = scan_tagged_files(cwd)
+    tagged_files = scan_tagged_files(cwd, args.tag)
 
     if not tagged_files:
         print(
-            f"\n⚠️  No files tagged with '{NOTEBOOKLM_TAG}' found in {cwd}. "
+            f"\n⚠️  No files tagged with '{args.tag}' found in {cwd}. "
             "Nothing to sync."
         )
         return
@@ -623,17 +652,26 @@ def main() -> None:
 
     empty_tabs = [t for t in doc_tabs if t["is_empty"]]
     files_to_add = actions["add"]
+    needed = len(files_to_add) - len(empty_tabs)
 
-    if len(files_to_add) > len(empty_tabs):
-        print(
-            f"\n❌ Cannot proceed: {len(files_to_add)} files to ADD but only "
-            f"{len(empty_tabs)} empty tabs available.\n"
-            "Please add more tabs to the Google Doc before running again."
-        )
-        sys.exit(1)
+    if needed > 0:
+        print(f"  Need {needed} more tab(s) — creating them…")
+        try:
+            for _ in range(needed):
+                create_tab(docs_svc, doc_id)
+            # Re-fetch so we have the new tab IDs
+            doc_tabs = extract_tabs(fetch_fresh_doc(docs_svc, doc_id))
+            empty_tabs = [t for t in doc_tabs if t["is_empty"]]
+            print(f"  Created {needed} tab(s). Document now has {len(doc_tabs)} tab(s).")
+        except HttpError as e:
+            print(
+                f"\n❌ Cannot create tabs automatically ({e}).\n"
+                f"Please add {needed} more tab(s) to the Google Doc manually and run again."
+            )
+            sys.exit(1)
 
     now_utc = datetime.now(timezone.utc).isoformat()
-    empty_queue = list(empty_tabs)  # consume in order
+    empty_queue = list(empty_tabs)
 
     # ADD new files
     for file_info in files_to_add:
@@ -642,7 +680,6 @@ def main() -> None:
         print(f"  ➕ ADD  '{file_info['file']}'  →  tab '{tab['title']}' (→ '{title}')")
 
         try:
-            rename_tab(docs_svc, doc_id, tab["tab_id"], title)
             # Clear in case the "empty" tab had invisible whitespace
             fresh = fetch_fresh_doc(docs_svc, doc_id)
             fresh_tabs = {t["tab_id"]: t for t in extract_tabs(fresh)}
@@ -671,7 +708,6 @@ def main() -> None:
         tab_key   = file_info["_tab_key"]
         tab_id    = entry.get("tab_id")
         tab_title = entry.get("tab_title", "")
-        new_title = file_info["tab_title"]
 
         # Resolve tab_id if missing
         if not tab_id:
@@ -695,15 +731,13 @@ def main() -> None:
                 continue
             clear_tab(docs_svc, doc_id, tab_id, fresh_tabs[tab_id]["body_content"])
             insert_into_tab(docs_svc, doc_id, tab_id, file_info["content"])
-            if new_title != tab_title:
-                rename_tab(docs_svc, doc_id, tab_id, new_title)
         except HttpError as e:
             print(f"    ERROR: {e}")
             continue
 
         registry["tabs"][tab_key].update(
             {
-                "tab_title":     new_title,
+                "tab_title":     tab_title,
                 "tab_id":        tab_id,
                 "last_synced":   now_utc,
                 "last_modified": file_info["last_modified"],
