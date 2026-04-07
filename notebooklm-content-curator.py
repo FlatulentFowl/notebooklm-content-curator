@@ -75,7 +75,7 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 REGISTRY_FILENAME = "notebooklm-registry.json"
 TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.json"
 _LEGACY_TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.pickle"
