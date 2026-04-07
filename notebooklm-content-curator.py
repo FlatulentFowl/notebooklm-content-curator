@@ -13,7 +13,7 @@ Usage:
 
 Options:
     --dry-run   Preview what would change without writing to Google Docs or the registry.
-    --dir PATH  Directory to scan for tagged markdown files (default: test).
+    --dir PATH  Directory to scan for tagged markdown files (default: current directory).
 
 Setup:
     1. Install dependencies:
@@ -564,8 +564,8 @@ def main() -> None:
         help="Show what would change without touching the Google Doc or registry.",
     )
     parser.add_argument(
-        "--dir", default="test", metavar="PATH",
-        help="Directory to scan (default: test).",
+        "--dir", default=".", metavar="PATH",
+        help="Directory to scan (default: current directory).",
     )
     parser.add_argument(
         "--tag", default=NOTEBOOKLM_TAG, metavar="TAG",

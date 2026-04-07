@@ -2,17 +2,17 @@
 
 Syncs tagged markdown files from any folder into a Google Doc, so they can be used as sources in [NotebookLM](https://notebooklm.google.com).
 
-Each tagged file gets its own tab in the Google Doc. The script tracks what has already been synced and only updates files whose content has actually changed. New tabs are created automatically when needed.
+Each tagged file is written to its own tab in the Google Doc. The script tracks what has already been synced using a local registry file and only updates tabs whose content has actually changed (detected by hash). New tabs are created automatically when needed.
 
 ---
 
 ## How it works
 
-1. Run the script from any folder (or point it at one with `--dir`)
-2. It scans recursively for `.md` files tagged as NotebookLM sources in their YAML frontmatter
+1. Run the script from your notes folder, or point it at one with `--dir`
+2. It scans recursively for `.md` files whose YAML frontmatter includes the target tag
 3. It connects to your Google Doc and checks the current tab state
-4. It adds new files to available tabs (creating new tabs if needed), updates changed files, and skips unchanged ones
-5. It saves a `notebooklm-registry.json` in your folder to track sync state
+4. It adds new files to available tabs (creating new ones if needed), updates changed files, and skips unchanged ones
+5. It saves a `notebooklm-registry.json` in the scanned folder to track sync state
 6. It prints a report showing exactly what happened
 
 ---
@@ -38,18 +38,17 @@ pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-py
 ~/.config/notebooklm-curator/credentials.json
 ```
 
-The first time you run the script a browser window opens asking you to sign in and grant access. After that the token is cached at `~/.config/notebooklm-curator/token.json` and you won't be prompted again.
+The first time you run the script a browser window opens asking you to sign in and grant access. After that the token is cached at `~/.config/notebooklm-curator/token.json` (readable only by you) and you won't be prompted again.
 
-### 3. Prepare your Google Doc
+### 3. Create your Google Doc
 
-- Create a Google Doc named exactly: `frictionless-supply-chain-notebooklm`
+- Create a Google Doc with any name
 - You don't need to pre-create tabs — the script creates them automatically as needed
-
-> **Tip:** You can change the document name in `notebooklm-registry.json` under `google_doc_name`, or add a `google_doc_id` field directly if you know the document ID.
+- Point the script at it using `--file "Your Doc Name"` or set `google_doc_name` in `notebooklm-registry.json`
 
 ---
 
-## Tagging a file
+## Tagging files
 
 Add a YAML frontmatter block at the top of any `.md` file you want synced:
 
@@ -78,38 +77,23 @@ Files without the tag are ignored entirely. The YAML frontmatter block itself is
 
 ---
 
-## Tab titles
-
-The tab title in Google Docs is derived from the file:
-
-- If the file has a `# H1 heading`, that becomes the tab title
-- Otherwise the filename is used, with hyphens/underscores replaced by spaces and title-cased
-
-| Filename | H1 heading | Tab title |
-|---|---|---|
-| `supply-chain-overview.md` | `# Supply Chain Overview` | Supply Chain Overview |
-| `risk-register.md` | *(none)* | Risk Register |
-
-If two files would produce the same tab title, the filename is appended to disambiguate: `Supply Chain Overview (overview-v1.md)`.
-
-> **Note:** Tab renaming is not currently supported by the Google Docs API. Tabs keep whatever title they had when created.
-
----
-
 ## Usage
 
 ```bash
-# Preview what would change — no writes to Google Doc or registry
+# Check version
+python3 notebooklm-content-curator.py --version
+
+# Preview what would change in the current directory
 python3 notebooklm-content-curator.py --dry-run
 
-# Sync from a specific directory
-python3 notebooklm-content-curator.py --dir /path/to/your/vault
+# Sync the current directory to a Google Doc
+python3 notebooklm-content-curator.py --file "my-notebooklm-doc"
+
+# Sync a specific folder to a Google Doc
+python3 notebooklm-content-curator.py --dir ~/notes --file "my-notebooklm-doc"
 
 # Sync files with a custom tag
-python3 notebooklm-content-curator.py --tag my-custom-tag
-
-# Sync to a specific Google Doc by name
-python3 notebooklm-content-curator.py --file "my-notebooklm-doc"
+python3 notebooklm-content-curator.py --dir ~/notes --tag research --file "research-doc"
 
 # Combine all options
 python3 notebooklm-content-curator.py --dir ~/notes --tag research --file "research-notebooklm" --dry-run
@@ -119,17 +103,18 @@ python3 notebooklm-content-curator.py --dir ~/notes --tag research --file "resea
 
 | Switch | Default | Description |
 |---|---|---|
-| `--dir PATH` | `test` | Directory to scan recursively for tagged markdown files |
+| `--dir PATH` | current directory | Directory to scan recursively for tagged markdown files |
 | `--tag TAG` | `notebooklm-source` | Frontmatter tag to look for |
 | `--file DOC_NAME` | *(from registry)* | Name of the Google Doc to sync to |
-| `--dry-run` | off | Preview changes without writing anything |
+| `--dry-run` / `--preview` | off | Preview changes without writing anything |
+| `--version` | — | Print the version number and exit |
 
 ### `--tag`
 
-By default the script looks for files tagged `notebooklm-source`. Use `--tag` to target a different tag, for example if you have multiple workflows or vaults with different tagging conventions.
+By default the script looks for files tagged `notebooklm-source`. Use `--tag` to target a different tag — useful when you have multiple workflows or vaults with different tagging conventions.
 
 ```yaml
-# This file would be picked up with --tag research
+# This file is picked up with --tag research
 ---
 tags:
   - research
@@ -137,15 +122,15 @@ tags:
 ```
 
 ```bash
-python3 notebooklm-content-curator.py --tag research --dir ~/notes/research
+python3 notebooklm-content-curator.py --dir ~/notes/research --tag research --file "research-notebooklm"
 ```
 
 ### `--file`
 
-By default the target Google Doc is read from `notebooklm-registry.json`. Use `--file` to override this — useful when syncing different directories to different docs, or when setting up for the first time without editing the registry manually.
+By default the target Google Doc name is read from `notebooklm-registry.json`. Use `--file` to override this without editing the registry — useful when syncing different directories to different docs.
 
 ```bash
-# Sync project-a notes to one doc, project-b to another
+# Sync two separate vaults to two separate docs
 python3 notebooklm-content-curator.py --dir ~/notes/project-a --file "project-a-notebooklm"
 python3 notebooklm-content-curator.py --dir ~/notes/project-b --file "project-b-notebooklm"
 ```
@@ -176,7 +161,7 @@ python3 notebooklm-content-curator.py --dir ~/notes/project-b --file "project-b-
 
 The script creates `notebooklm-registry.json` in the scanned directory. It tracks which files are synced to which tabs, along with content hashes used to detect changes.
 
-**You do not need to edit this file manually.** But if something looks wrong, you can open it to inspect or correct entries. The important fields are:
+**You do not need to edit this file manually.** But if something looks wrong, you can open it to inspect or correct entries.
 
 | Field | Description |
 |---|---|
@@ -185,31 +170,42 @@ The script creates `notebooklm-registry.json` in the scanned directory. It track
 | `last_sync` | UTC timestamp of the last successful sync |
 | `tabs` | Map of tab keys to synced file metadata |
 
+> **Tip:** Delete `notebooklm-registry.json` to force a full re-sync from scratch.
+
 ---
 
 ## Warnings and edge cases
 
 | Situation | Behaviour |
 |---|---|
-| Registry exists but doc was recreated | Integrity check surfaces mismatches — reported as warnings |
+| Not enough empty tabs in the doc | New tabs created automatically |
 | Tag removed from a file | Warning printed, tab left intact — no automatic deletion |
 | File deleted from disk | Warning printed, tab left intact |
-| Not enough empty tabs | New tabs created automatically |
 | File larger than 1 MB | Skipped with a warning |
-| Symlinks in the scanned directory | Skipped (security) |
-| Google Doc not found by name | Error message with instructions to verify the name or add the ID manually |
+| Symlinks in the scanned directory | Skipped |
+| Registry exists but doc was recreated | Integrity check surfaces mismatches as warnings |
+| Corrupt registry file | Warning printed, registry starts fresh |
+| Google Doc not found by name | Error with instructions to verify the name or set `google_doc_id` manually |
 | No tagged files found | Script exits cleanly with a message |
 | Duplicate tab titles across files | Filename appended automatically to disambiguate |
-| Corrupt registry file | Warning printed, registry starts fresh |
 | Expired or revoked token | Automatically re-authenticates via browser |
 
 ---
 
 ## Running from multiple folders
 
-Each folder gets its own `notebooklm-registry.json`. You can sync multiple vaults to the same Google Doc or to different ones — just set the appropriate `google_doc_name` or `google_doc_id` in each registry file.
+Each folder gets its own `notebooklm-registry.json`. You can sync multiple vaults to the same Google Doc or to different ones.
 
 ```bash
-python3 notebooklm-content-curator.py --dir ~/work/project-a
-python3 notebooklm-content-curator.py --dir ~/work/project-b
+python3 notebooklm-content-curator.py --dir ~/work/project-a --file "project-a-notebooklm"
+python3 notebooklm-content-curator.py --dir ~/work/project-b --file "project-b-notebooklm"
 ```
+
+---
+
+## Security
+
+- OAuth token is stored as JSON with `0o600` permissions (owner-readable only)
+- Symlinks inside the scanned directory are skipped to prevent reading files outside it
+- Files larger than 1 MB are skipped
+- The Google Drive search query is escaped to handle special characters in doc names
