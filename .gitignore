@@ -1,1 +1,15 @@
+.DS_Store
+
 test/
+Google Meet/
+Google Chat/
+Google Mail/
+
+# Local config — may contain email addresses, user IDs, space IDs
+config.json
+user_mapping.json
+space_mapping.json
+
+# OAuth tokens — never commit these
+*.token.json
+google-*-token.json

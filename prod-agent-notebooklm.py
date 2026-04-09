@@ -27,9 +27,9 @@ Setup:
            c. Enable the Google Docs API and Google Drive API
            d. Go to APIs & Services → Credentials → Create Credentials → OAuth client ID
            e. Choose Desktop app, download the JSON
-           f. Save it to: ~/.config/notebooklm-curator/credentials.json
+           f. Save it to: ~/.config/productivity-agent/credentials.json
     3. On first run a browser window opens — sign in and grant access.
-       The token is cached at ~/.config/notebooklm-curator/token.json (owner-read only).
+       The token is cached at ~/.config/productivity-agent/google-drive-token.json (owner-read only).
 
 Tagging files:
     Add a YAML frontmatter block to any .md file you want synced:
@@ -81,9 +81,9 @@ SCOPES = [
 ]
 VERSION = "0.1.2"
 REGISTRY_FILENAME = "notebooklm-registry.json"
-TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.json"
-_LEGACY_TOKEN_PATH = Path.home() / ".config" / "notebooklm-curator" / "token.pickle"
-CREDENTIALS_PATH = Path.home() / ".config" / "notebooklm-curator" / "credentials.json"
+TOKEN_PATH = Path.home() / ".config" / "productivity-agent" / "google-drive-token.json"
+_LEGACY_TOKEN_PATH = Path.home() / ".config" / "productivity-agent" / "token.pickle"
+CREDENTIALS_PATH = Path.home() / ".config" / "productivity-agent" / "credentials.json"
 NOTEBOOKLM_TAG = "notebooklm-source"
 MAX_FILE_BYTES = 5 * 1024 * 1024  # 5 MB — Google Docs API batchUpdate limit
 
