@@ -1,18 +1,15 @@
+import argparse
 import datetime
-import os
-import json
-import re
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from agent_utils import get_credentials, get_date_range, load_config
 
 # If modifying these scopes, delete the token file.
 SCOPES = [
     'https://www.googleapis.com/auth/drive.meet.readonly',
     'https://www.googleapis.com/auth/documents.readonly',
     'https://www.googleapis.com/auth/calendar.readonly',
+    'https://www.googleapis.com/auth/tasks',
 ]
 
 HEADING_MAP = {
@@ -56,89 +53,143 @@ def doc_content_to_markdown(body_content):
     return '\n'.join(lines)
 
 
-def safe_filename(name):
-    """Strip characters that are invalid in filenames."""
-    return re.sub(r'[\\/*?:"<>|]', '', name).strip()
+def extract_action_items(markdown_text, assignees):
+    """Return clean task titles for bullet lines assigned to one of the given assignees."""
+    items = []
+    for line in markdown_text.splitlines():
+        content = line.lstrip().removeprefix('- ')
+        for assignee in assignees:
+            prefix = f'[{assignee}] '
+            if content.startswith(prefix):
+                items.append(content[len(prefix):].strip())
+                break
+    return items
 
 
-OUTPUT_DIR = "Google Meet"
+def find_next_steps_tab(tabs):
+    """Return the first tab whose title contains 'next step' (case-insensitive)."""
+    for tab in tabs:
+        title = tab.get('tabProperties', {}).get('title', '')
+        if 'next step' in title.lower():
+            return tab
+    return None
 
 
-def write_file(filename, content):
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    path = os.path.join(OUTPUT_DIR, filename)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
-    print(f"  Exported → {path}")
+def extract_next_steps_from_body(body_content):
+    """Extract content under the first heading containing 'next step'."""
+    in_section = False
+    section_heading_level = None
+    section_elements = []
+
+    for element in body_content:
+        paragraph = element.get('paragraph')
+        if not paragraph:
+            continue
+
+        style = paragraph.get('paragraphStyle', {}).get('namedStyleType', 'NORMAL_TEXT')
+        text = ''.join(
+            pe.get('textRun', {}).get('content', '') for pe in paragraph.get('elements', [])
+        ).rstrip('\n')
+
+        if not in_section:
+            if style in HEADING_MAP and 'next step' in text.lower():
+                in_section = True
+                section_heading_level = int(style.split('_')[1])
+        else:
+            if style in HEADING_MAP and int(style.split('_')[1]) <= section_heading_level:
+                break
+            section_elements.append(element)
+
+    return doc_content_to_markdown(section_elements) if section_elements else None
+
+
+def get_default_tasklist(tasks_service):
+    """Return the ID of the first (default) task list."""
+    result = tasks_service.tasklists().list(maxResults=1).execute()
+    items = result.get('items', [])
+    if not items:
+        raise RuntimeError('No task lists found in Google Tasks.')
+    return items[0]['id']
+
+
+def create_task_with_subtasks(tasks_service, tasklist_id, title, subtask_titles):
+    """Create a parent task and add subtasks under it."""
+    parent = tasks_service.tasks().insert(
+        tasklist=tasklist_id,
+        body={'title': title, 'status': 'needsAction'}
+    ).execute()
+    for subtask_title in subtask_titles:
+        tasks_service.tasks().insert(
+            tasklist=tasklist_id,
+            parent=parent['id'],
+            body={'title': subtask_title, 'status': 'needsAction'}
+        ).execute()
+    return parent
 
 
 def main():
-    """Finds Google Meet Gemini notes from calendar events in the last 24 hours and exports them as markdown."""
-    config_dir = os.path.expanduser('~/.config/productivity-agent')
-    os.makedirs(config_dir, exist_ok=True)
-    token_path = os.path.join(config_dir, 'google-meet-token.json')
-    creds_path = os.path.join(config_dir, 'credentials.json')
+    """Finds Google Meet Gemini next steps and creates Google Tasks from them."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-date', dest='date', default=None,
+                        help="Date to search: DD/MM/YYYY, 'today', or omit for previous weekday")
+    args = parser.parse_args()
 
-    creds = None
-    if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(token_path, 'w') as token:
-            token.write(creds.to_json())
+    creds = get_credentials('google-meet-token.json', SCOPES)
 
     try:
         calendar_service = build('calendar', 'v3', credentials=creds)
         docs_service = build('docs', 'v1', credentials=creds)
+        tasks_service = build('tasks', 'v1', credentials=creds)
 
         # Load configuration
-        ignored_meetings = []
-        if os.path.exists('config.json'):
-            with open('config.json', 'r') as f:
-                config_data = json.load(f)
-                ignored_meetings = config_data.get('ignored_meetings', [])
+        config_data = load_config()
+        ignored_meetings = config_data.get('ignored_meetings', [])
+        primary_user = config_data.get('primary_user', [])
 
-        # Calculate the past 24 hours date range (SAST)
-        sast_tz = datetime.timezone(datetime.timedelta(hours=2), name="SAST")
-        now = datetime.datetime.now(sast_tz)
-        twenty_four_hours_ago = now - datetime.timedelta(days=1)
+        tasklist_id = get_default_tasklist(tasks_service)
 
-        time_min = twenty_four_hours_ago.astimezone(datetime.timezone.utc).isoformat()
-        time_max = now.astimezone(datetime.timezone.utc).isoformat()
+        # Calculate the target date range (SAST)
+        result = get_date_range(args.date)
+        if result is None:
+            return
+        start, end = result
 
-        print(f"Looking for calendar events with Meet notes from the last 24 hours (since {twenty_four_hours_ago.isoformat()})")
+        time_min = start.astimezone(datetime.timezone.utc).isoformat()
+        time_max = end.astimezone(datetime.timezone.utc).isoformat()
 
-        # Fetch calendar events for the last 24 hours.
-        events_result = calendar_service.events().list(
-            calendarId='primary',
-            timeMin=time_min,
-            timeMax=time_max,
-            singleEvents=True,
-            orderBy='startTime'
-        ).execute()
+        print(f"Looking for calendar events with Meet notes between {start.isoformat()} and {end.isoformat()}")
 
-        events = events_result.get('items', [])
+        # Fetch calendar events with pagination
+        events = []
+        page_token = None
+        while True:
+            events_result = calendar_service.events().list(
+                calendarId='primary',
+                timeMin=time_min,
+                timeMax=time_max,
+                singleEvents=True,
+                orderBy='startTime',
+                pageToken=page_token
+            ).execute()
+            events.extend(events_result.get('items', []))
+            page_token = events_result.get('nextPageToken')
+            if not page_token:
+                break
 
         if not events:
-            print('No calendar events found in the last 24 hours.')
+            print('No calendar events found for the target date.')
             return
 
         print(f'Found {len(events)} calendar event(s). Checking for attached Gemini notes...')
 
-        files_written = 0
+        tasks_created = 0
 
         for event in events:
             event_title = event.get('summary', 'Untitled Meeting')
             event_id = event.get('id', '')
             start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
 
-            # Check if this meeting should be ignored (by title or event ID)
             if event_title in ignored_meetings or event_id in ignored_meetings:
-                print(f"Skipping ignored meeting: {event_title}")
                 continue
 
             # Gemini notes are linked as Google Doc attachments on the calendar event
@@ -151,14 +202,12 @@ def main():
             if not doc_attachments:
                 continue
 
-            # Format the event start time as DD-MM-YYYY for filenames
             try:
                 start_dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
                 formatted_date = start_dt.strftime("%d-%m-%Y")
             except Exception:
-                formatted_date = now.strftime("%d-%m-%Y")
+                formatted_date = start.strftime("%d-%m-%Y")
 
-            base_name = safe_filename(event_title)
             print(f"\nProcessing: {event_title} ({formatted_date})")
 
             for attachment in doc_attachments:
@@ -180,45 +229,32 @@ def main():
                     continue
 
                 tabs = doc.get('tabs', [])
+                next_steps_md = None
 
                 if not tabs:
-                    # No tabs — treat the whole document body as notes
                     body_content = doc.get('body', {}).get('content', [])
-                    notes_md = doc_content_to_markdown(body_content)
-                    if notes_md.strip():
-                        filename = f"{base_name} - {formatted_date}.md"
-                        write_file(filename, f"# {event_title}\n\n{notes_md}")
-                        files_written += 1
+                    next_steps_md = extract_next_steps_from_body(body_content)
                 else:
-                    # Tab 1: Notes
-                    notes_md = ''
-                    if len(tabs) >= 1:
-                        notes_body = tabs[0].get('documentTab', {}).get('body', {}).get('content', [])
-                        notes_md = doc_content_to_markdown(notes_body)
+                    next_steps_tab = find_next_steps_tab(tabs)
+                    if next_steps_tab:
+                        tab_body = next_steps_tab.get('documentTab', {}).get('body', {}).get('content', [])
+                        next_steps_md = doc_content_to_markdown(tab_body)
+                    elif tabs:
+                        tab_body = tabs[0].get('documentTab', {}).get('body', {}).get('content', [])
+                        next_steps_md = extract_next_steps_from_body(tab_body)
 
-                    # Tab 2: Transcript
-                    transcript_md = ''
-                    if len(tabs) >= 2:
-                        transcript_body = tabs[1].get('documentTab', {}).get('body', {}).get('content', [])
-                        transcript_md = doc_content_to_markdown(transcript_body)
+                action_items = extract_action_items(next_steps_md, primary_user) if next_steps_md and primary_user else []
 
-                    # Skip meetings that have neither notes nor transcript
-                    if not notes_md.strip() and not transcript_md.strip():
-                        print(f"  No content found — skipping.")
-                        continue
+                if action_items:
+                    task_title = f"{event_title} ({formatted_date})"
+                    create_task_with_subtasks(tasks_service, tasklist_id, task_title, action_items)
+                    print(f"  Created task '{task_title}' with {len(action_items)} subtask(s).")
+                    tasks_created += 1
+                else:
+                    print(f"    No Next Steps content found — skipping.")
 
-                    if notes_md.strip():
-                        filename = f"{base_name} - {formatted_date}.md"
-                        write_file(filename, f"# {event_title}\n\n{notes_md}")
-                        files_written += 1
-
-                    if transcript_md.strip():
-                        filename = f"{base_name} - {formatted_date} (Transcript).md"
-                        write_file(filename, f"# {event_title} (Transcript)\n\n{transcript_md}")
-                        files_written += 1
-
-        if files_written:
-            print(f"\n{files_written} file(s) exported.")
+        if tasks_created:
+            print(f"\n{tasks_created} task(s) created in Google Tasks.")
         else:
             print("\nNo Gemini notes found on any calendar events.")
 

@@ -1,6 +1,6 @@
 # Productivity Agent
 
-A suite of scripts that pull your Google Workspace activity from the last 24 hours and export it as markdown files, ready for use as [NotebookLM](https://notebooklm.google.com) sources or any other purpose.
+A suite of scripts that pull your Google Workspace activity from the previous weekday and export it as markdown files, ready for use as [NotebookLM](https://notebooklm.google.com) sources or any other purpose. On Mondays, the scripts automatically look back to the previous Friday.
 
 | Script | What it does | Output folder |
 |---|---|---|
@@ -73,7 +73,7 @@ Create a `config.json` file in the project directory. All fields are optional.
 
 ### `prod-agent-chat.py` — Google Chat
 
-Fetches messages from all Google Chat spaces you are a member of, covering the last 24 hours. Spaces with no recent activity are skipped automatically using `lastActiveTime`.
+Fetches messages from all Google Chat spaces you are a member of, covering the previous weekday. On Mondays, it exports messages from the previous Friday. Spaces with no recent activity are skipped automatically.
 
 **APIs required:** Google Chat API  
 **Token:** `~/.config/productivity-agent/google-chat-token.json`
@@ -99,7 +99,7 @@ python3 prod-agent-chat.py
 
 ### `prod-agent-meet.py` — Google Meet Gemini Notes
 
-Fetches calendar events from the last 24 hours and reads any Google Docs attached as Gemini notes. Gemini notes typically have two tabs — Notes and Transcript — each exported as a separate file.
+Fetches calendar events from the previous weekday and reads any Google Docs attached as Gemini notes. Gemini notes typically have two tabs — Notes and Transcript — each exported as a separate file. On Mondays, it processes events from the previous Friday.
 
 **APIs required:** Google Calendar API, Google Drive API (`drive.meet.readonly`), Google Docs API  
 **Token:** `~/.config/productivity-agent/google-meet-token.json`
@@ -118,7 +118,7 @@ python3 prod-agent-meet.py
 
 ### `prod-agent-mail.py` — Gmail
 
-Fetches sent and received emails from the last 24 hours. For threaded conversations, only the most recent message in each thread is included.
+Fetches sent and received emails from the previous weekday. On Mondays, it processes emails from the previous Friday. For threaded conversations, only the most recent message in each thread is included.
 
 **APIs required:** Gmail API  
 **Token:** `~/.config/productivity-agent/google-mail-token.json`
@@ -179,6 +179,11 @@ tags:
 ---
 
 ## Changelog
+
+### v0.1.4
+- On Mondays, scripts now process data from the previous Friday instead of Sunday
+- Standardised date range logic in `agent_utils.py` to target the "previous weekday"
+- Updated misleading print messages and documentation regarding the search window
 
 ### v0.1.3
 - Added `prod-agent-chat.py` — exports Google Chat messages to markdown

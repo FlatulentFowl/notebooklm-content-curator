@@ -1,18 +1,16 @@
+import argparse
 import base64
 import datetime
 import os
-import json
 import re
 
-from google.auth.transport.requests import Request
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
+from agent_utils import get_credentials, get_date_range, load_config
 
 # If modifying these scopes, delete the token file.
 SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
 
-OUTPUT_DIR = "Google Mail"
+OUTPUT_DIR = "raw/google-mail"
 
 
 def get_header(headers, name):
@@ -79,7 +77,7 @@ def format_email_block(msg):
     # internalDate is milliseconds since epoch
     internal_date_ms = int(msg.get('internalDate', 0))
     dt = datetime.datetime.fromtimestamp(internal_date_ms / 1000, tz=datetime.timezone.utc)
-    sast_tz = datetime.timezone(datetime.timedelta(hours=2))
+    sast_tz = datetime.timezone(datetime.timedelta(hours=2), name="SAST")
     dt_sast = dt.astimezone(sast_tz)
     formatted_date = dt_sast.strftime("%d-%m-%Y %H:%M")
 
@@ -102,7 +100,7 @@ def format_email_block(msg):
 def fetch_latest_per_thread(gmail_service, query):
     """
     List messages matching query, group by threadId, return only the
-    most recent message ID per thread (by internalDate).
+    most recent message ID per thread (relying on Gmail's default sort).
     Returns a list of full message dicts.
     """
     # Collect all matching message stubs (id + threadId only)
@@ -121,77 +119,62 @@ def fetch_latest_per_thread(gmail_service, query):
     if not stubs:
         return []
 
-    # Fetch minimal metadata (internalDate + threadId) for deduplication
-    thread_latest = {}  # threadId -> (internalDate, messageId)
+    # Gmail's list returns messages in reverse chronological order (newest first).
+    # The first time we encounter a threadId, it is the latest message in that thread for our query.
+    thread_latest_ids = {}
     for stub in stubs:
-        msg_id = stub['id']
-        thread_id = stub['threadId']
-        meta = gmail_service.users().messages().get(
-            userId='me', id=msg_id, format='metadata',
-            metadataHeaders=['Date']
-        ).execute()
-        internal_date = int(meta.get('internalDate', 0))
-        if thread_id not in thread_latest or internal_date > thread_latest[thread_id][0]:
-            thread_latest[thread_id] = (internal_date, msg_id)
+        thread_id = stub.get('threadId')
+        msg_id = stub.get('id')
+        if thread_id and msg_id and thread_id not in thread_latest_ids:
+            thread_latest_ids[thread_id] = msg_id
 
     # Fetch full content only for the surviving messages
     messages = []
-    for _, msg_id in thread_latest.values():
+    for msg_id in thread_latest_ids.values():
         full_msg = gmail_service.users().messages().get(
             userId='me', id=msg_id, format='full'
         ).execute()
         messages.append(full_msg)
 
-    # Sort by internalDate ascending (oldest first)
+    # Sort by internalDate ascending (oldest first) so the final markdown flows forward
     messages.sort(key=lambda m: int(m.get('internalDate', 0)))
     return messages
 
 
 def main():
-    """Fetches sent and received emails from the last 24 hours and exports them as markdown."""
-    config_dir = os.path.expanduser('~/.config/productivity-agent')
-    os.makedirs(config_dir, exist_ok=True)
-    token_path = os.path.join(config_dir, 'google-mail-token.json')
-    creds_path = os.path.join(config_dir, 'credentials.json')
+    """Fetches inbound emails from the previous weekday and exports them as markdown."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-date', dest='date', default=None,
+                        help="Date to search: DD/MM/YYYY, 'today', or omit for previous weekday")
+    args = parser.parse_args()
 
-    creds = None
-    if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
-    if not creds or not creds.valid:
-        if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:
-            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open(token_path, 'w') as token:
-            token.write(creds.to_json())
+    creds = get_credentials('google-mail-token.json', SCOPES)
 
     try:
         gmail_service = build('gmail', 'v1', credentials=creds)
 
         # Load configuration
-        ignored_senders = []
-        if os.path.exists('config.json'):
-            with open('config.json', 'r') as f:
-                config_data = json.load(f)
-                ignored_senders = [s.lower() for s in config_data.get('ignored_senders', [])]
+        config_data = load_config()
+        ignored_senders = [s.lower() for s in config_data.get('ignored_senders', [])]
+        ignored_recipients = [r.lower() for r in config_data.get('ignored_recipients', [])]
 
-        # Calculate the past 24 hours date range (SAST)
-        sast_tz = datetime.timezone(datetime.timedelta(hours=2), name="SAST")
-        now = datetime.datetime.now(sast_tz)
-        twenty_four_hours_ago = now - datetime.timedelta(days=1)
+        # Calculate the target date range (SAST)
+        result = get_date_range(args.date)
+        if result is None:
+            return
+        start, end = result
 
-        # Gmail search uses Unix epoch seconds in the 'after:' operator
-        after_epoch = int(twenty_four_hours_ago.timestamp())
-        file_date = now.strftime("%d-%m-%Y")
+        # Gmail search uses Unix epoch seconds in the 'after:' / 'before:' operators
+        after_epoch = int(start.timestamp())
+        before_epoch = int(end.timestamp()) + 1  # +1s so 23:59:59 is fully included
+        file_date = start.strftime("%d-%m-%Y")
 
-        print(f"Looking for emails from the last 24 hours (since {twenty_four_hours_ago.isoformat()})")
+        print(f"Looking for emails between {start.isoformat()} and {end.isoformat()}")
 
         os.makedirs(OUTPUT_DIR, exist_ok=True)
 
         for label, query, filename_suffix, heading in [
-            ('received', f'in:inbox after:{after_epoch}', 'emails-received', 'Received Emails'),
-            ('sent',     f'in:sent after:{after_epoch}',  'emails-sent',     'Sent Emails'),
+            ('inbound', f'in:inbox after:{after_epoch} before:{before_epoch}', 'emails-inbound', 'Inbound Emails'),
         ]:
             print(f"\nFetching {label} emails...")
             messages = fetch_latest_per_thread(gmail_service, query)
@@ -208,9 +191,10 @@ def main():
                 headers = msg.get('payload', {}).get('headers', [])
                 from_addr = get_header(headers, 'From').lower()
                 to_addr = get_header(headers, 'To').lower()
-                combined = from_addr + ' ' + to_addr
 
-                if any(pattern in combined for pattern in ignored_senders):
+                # Filter based on ignored senders and recipients
+                if any(pattern in from_addr for pattern in ignored_senders) or \
+                   any(pattern in to_addr for pattern in ignored_recipients):
                     skipped += 1
                     continue
 
@@ -221,7 +205,7 @@ def main():
                 blocks.append(format_email_block(msg))
 
             if skipped:
-                print(f"  Skipped {skipped} email(s) from ignored senders.")
+                print(f"  Skipped {skipped} email(s) from ignored senders or meeting invites.")
 
             if not blocks:
                 print(f"  No {label} emails to export after filtering.")
