@@ -40,34 +40,26 @@ def file_has_tag(file_path, tag):
         print(f"Error reading {file_path}: {e}")
         return False
 
-def upload_to_drive(service, local_path, folder_id):
-    """Uploads or updates a file on Google Drive, converting it to a Google Doc."""
+def upload_to_drive(service, local_path, folder_id, dry_run=False):
     base_name = os.path.basename(local_path)
-    # Strip .md extension for the Google Doc title
     doc_title = os.path.splitext(base_name)[0]
-    
-    print(f"Found matching file: {doc_title}")
-    
-    # Search for existing Google Doc with same title in target folder
+
     safe_title = doc_title.replace("'", "\\'")
     query = f"name = '{safe_title}' and '{folder_id}' in parents and mimeType = 'application/vnd.google-apps.document' and trashed = false"
     results = service.files().list(q=query, fields="files(id)").execute()
     files = results.get('files', [])
 
-    file_metadata = {
-        'name': doc_title,
-        'mimeType': 'application/vnd.google-apps.document',
-        'parents': [folder_id]
-    }
-    
-    # Use text/plain as the source mimeType - Drive converter is more stable with it
-    media = MediaFileUpload(local_path, mimetype='text/plain', resumable=True)
-
     if files:
-        # Skip if Google Doc already exists
         print(f"Skipped: {doc_title} (already exists)")
+    elif dry_run:
+        print(f"Would upload: {doc_title}")
     else:
-        # Create new Google Doc
+        file_metadata = {
+            'name': doc_title,
+            'mimeType': 'application/vnd.google-apps.document',
+            'parents': [folder_id]
+        }
+        media = MediaFileUpload(local_path, mimetype='text/plain', resumable=True)
         try:
             service.files().create(body=file_metadata, media_body=media, fields='id').execute()
             print(f"Created Google Doc: {doc_title}")
@@ -75,6 +67,14 @@ def upload_to_drive(service, local_path, folder_id):
             print(f"Error uploading {doc_title}: {e}")
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', action='store_true', help='Preview uploads without making changes')
+    args = parser.parse_args()
+
+    if args.dry_run:
+        print('Dry run mode — no files will be uploaded.\n')
+
     creds = get_credentials('google-notebooklm-token.json', SCOPES)
     service = build('drive', 'v3', credentials=creds)
 
@@ -83,26 +83,24 @@ def main():
         if not os.path.exists(source_dir):
             print(f"Source directory not found: {source_dir}")
             continue
-            
+
         print(f"Scanning: {source_dir}")
         for root, dirs, files in os.walk(source_dir):
-            # Skip hidden directories and .trash
             dirs[:] = [d for d in dirs if not d.startswith('.') and d.lower() != '.trash']
-            
+
             for file in files:
                 if file.startswith('.'):
                     continue
-                
-                # Ignore GEMINI.md and README files
+
                 upper_name = file.upper()
                 if upper_name == 'GEMINI.MD' or 'README' in upper_name:
                     continue
-                    
+
                 file_path = os.path.join(root, file)
                 if file_has_tag(file_path, TAG):
                     found_any = True
-                    upload_to_drive(service, file_path, DRIVE_FOLDER_ID)
-    
+                    upload_to_drive(service, file_path, DRIVE_FOLDER_ID, dry_run=args.dry_run)
+
     if not found_any:
         print(f"No files found with tag '{TAG}' in the specified directories.")
 
