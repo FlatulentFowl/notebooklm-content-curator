@@ -187,7 +187,7 @@ def main():
         for event in events:
             event_title = event.get('summary', 'Untitled Meeting')
             event_id = event.get('id', '')
-            start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
+            event_start = event.get('start', {}).get('dateTime', event.get('start', {}).get('date', ''))
 
             if event_title in ignored_meetings or event_id in ignored_meetings:
                 continue
@@ -203,10 +203,10 @@ def main():
                 continue
 
             try:
-                start_dt = datetime.datetime.fromisoformat(start.replace('Z', '+00:00'))
+                start_dt = datetime.datetime.fromisoformat(event_start.replace('Z', '+00:00'))
                 formatted_date = start_dt.strftime("%d-%m-%Y")
-            except Exception:
-                formatted_date = start.strftime("%d-%m-%Y")
+            except ValueError:
+                formatted_date = event_start[:10]
 
             print(f"\nProcessing: {event_title} ({formatted_date})")
 
@@ -239,7 +239,7 @@ def main():
                     if next_steps_tab:
                         tab_body = next_steps_tab.get('documentTab', {}).get('body', {}).get('content', [])
                         next_steps_md = doc_content_to_markdown(tab_body)
-                    elif tabs:
+                    else:
                         tab_body = tabs[0].get('documentTab', {}).get('body', {}).get('content', [])
                         next_steps_md = extract_next_steps_from_body(tab_body)
 

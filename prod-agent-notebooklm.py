@@ -1,20 +1,26 @@
 import os
 
+from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from agent_utils import get_credentials
+
+load_dotenv()
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/drive.metadata.readonly',
 ]
 
-# Configuration
-DRIVE_FOLDER_ID = '1am1fRfB5DxnMTCB3sBXN9q4dzxKuLERB'
+DRIVE_FOLDER_ID = os.getenv('NOTEBOOKLM_DRIVE_FOLDER_ID', '')
 TAG = 'notebooklm-source'
 SOURCE_DIRS = [
-    os.path.expanduser('~/Library/Mobile Documents/iCloud~md~obsidian/Documents'),
-    os.path.expanduser('~/scm-coe')
+    os.path.expanduser(d)
+    for d in os.getenv(
+        'NOTEBOOKLM_SOURCE_DIRS',
+        '~/Library/Mobile Documents/iCloud~md~obsidian/Documents:~/scm-coe'
+    ).split(':')
+    if d
 ]
 
 def file_has_tag(file_path, tag):

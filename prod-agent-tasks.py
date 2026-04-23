@@ -3,6 +3,7 @@ import re
 from googleapiclient.discovery import build
 from agent_utils import get_credentials
 
+# If modifying these scopes, delete the token file.
 SCOPES = ['https://www.googleapis.com/auth/tasks']
 
 CHECKBOX_PATTERN = re.compile(r'^\s*\[ ?\]\s*(?:-\s*)?(.+)', re.MULTILINE)
@@ -49,12 +50,10 @@ def create_subtask(service, tasklist_id, parent_id, title):
 
 
 def clear_task_notes(service, tasklist_id, task):
-    updated = dict(task)
-    updated['notes'] = ''
-    service.tasks().update(
+    service.tasks().patch(
         tasklist=tasklist_id,
         task=task['id'],
-        body=updated
+        body={'notes': ''}
     ).execute()
 
 
@@ -113,7 +112,6 @@ def main():
 
     except Exception as error:
         print(f'An error occurred: {error}')
-        raise
 
 
 if __name__ == '__main__':

@@ -2,13 +2,15 @@ import datetime
 import json
 import os
 
+from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-CONFIG_DIR = os.path.expanduser('~/.config/productivity-agent')
+load_dotenv()
 
-LOCAL_CREDENTIALS_PATH = 'credentials.json'
+CONFIG_DIR = os.path.expanduser(os.getenv('GOOGLE_CONFIG_DIR', '~/.config/productivity-agent'))
+LOCAL_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
 
 def get_credentials(token_filename: str, scopes: list) -> Credentials:
     """Standard OAuth2 credential flow for productivity agents.

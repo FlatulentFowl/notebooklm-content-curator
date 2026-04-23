@@ -5,7 +5,11 @@ saves the authorized token to credentials.json in this directory.
 """
 
 import os
+
+from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
+
+load_dotenv()
 
 SCOPES = [
     # Tasks
@@ -17,17 +21,11 @@ SCOPES = [
     # Drive (NotebookLM sync)
     'https://www.googleapis.com/auth/drive.file',
     'https://www.googleapis.com/auth/drive.metadata.readonly',
-    # Gmail
-    'https://www.googleapis.com/auth/gmail.readonly',
-    # Chat
-    'https://www.googleapis.com/auth/chat.spaces.readonly',
-    'https://www.googleapis.com/auth/chat.messages.readonly',
-    'https://www.googleapis.com/auth/chat.memberships.readonly',
-    'https://www.googleapis.com/auth/userinfo.profile',
 ]
 
-CLIENT_SECRETS = os.path.expanduser('~/.config/productivity-agent/credentials.json')
-OUTPUT = 'credentials.json'
+_config_dir = os.path.expanduser(os.getenv('GOOGLE_CONFIG_DIR', '~/.config/productivity-agent'))
+CLIENT_SECRETS = os.path.join(_config_dir, 'credentials.json')
+OUTPUT = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
 
 if not os.path.exists(CLIENT_SECRETS):
     raise FileNotFoundError(f'Client secrets not found at {CLIENT_SECRETS}')

@@ -4,9 +4,7 @@ A suite of scripts that pull your Google Workspace activity from the previous we
 
 | Script | What it does | Output folder |
 |---|---|---|
-| `prod-agent-chat.py` | Google Chat messages from all spaces | `Google Chat/` |
 | `prod-agent-meet.py` | Google Meet Gemini notes and transcripts | `Google Meet/` |
-| `prod-agent-mail.py` | Gmail sent and received emails | `Google Mail/` |
 | `prod-agent-notebooklm.py` | Syncs tagged markdown files to a Google Doc for NotebookLM | — |
 
 ---
@@ -44,15 +42,8 @@ Create a `config.json` file in the project directory. All fields are optional.
 
 ```json
 {
-  "ignored_spaces": [
-    "Daily Standup (ROOM)"
-  ],
   "ignored_meetings": [
     "All Hands Meeting"
-  ],
-  "ignored_senders": [
-    "noreply@example.com",
-    "notifications@"
   ],
   "meet_notes_search_term": "Notes from"
 }
@@ -60,9 +51,7 @@ Create a `config.json` file in the project directory. All fields are optional.
 
 | Key | Used by | Description |
 |---|---|---|
-| `ignored_spaces` | `prod-agent-chat.py` | Space display names or space resource IDs to skip |
 | `ignored_meetings` | `prod-agent-meet.py` | Calendar event titles or event IDs to skip |
-| `ignored_senders` | `prod-agent-mail.py` | Substring patterns matched against From and To headers. Partial matches work — e.g. `"rgottwald+"` skips all plus-addressed variants |
 | `meet_notes_search_term` | `prod-agent-meet.py` | Override the Drive search term for Gemini notes (default: `"Notes from"`) |
 
 > **Note:** `config.json` is excluded from git via `.gitignore` as it may contain identifying information.
@@ -70,32 +59,6 @@ Create a `config.json` file in the project directory. All fields are optional.
 ---
 
 ## Scripts
-
-### `prod-agent-chat.py` — Google Chat
-
-Fetches messages from all Google Chat spaces you are a member of, covering the previous weekday. On Mondays, it exports messages from the previous Friday. Spaces with no recent activity are skipped automatically.
-
-**APIs required:** Google Chat API  
-**Token:** `~/.config/productivity-agent/google-chat-token.json`
-
-**Output:** `Google Chat/google-chats-DD-MM-YYYY.md`
-
-Each message is formatted as:
-```
-[DD-MM-YYYY] **Sender Name**: Message text
-```
-
-**Optional files:**
-- `user_mapping.json` — map Google user resource IDs to display names
-- `space_mapping.json` — map space resource IDs to friendly names
-
-> Both files are excluded from git via `.gitignore`.
-
-```bash
-python3 prod-agent-chat.py
-```
-
----
 
 ### `prod-agent-meet.py` — Google Meet Gemini Notes
 
@@ -112,39 +75,6 @@ Meetings with no Gemini notes attached, or where both tabs are empty, are skippe
 
 ```bash
 python3 prod-agent-meet.py
-```
-
----
-
-### `prod-agent-mail.py` — Gmail
-
-Fetches sent and received emails from the previous weekday. On Mondays, it processes emails from the previous Friday. For threaded conversations, only the most recent message in each thread is included.
-
-**APIs required:** Gmail API  
-**Token:** `~/.config/productivity-agent/google-mail-token.json`
-
-**Output:** `Google Mail/`
-- `DD-MM-YYYY-emails-received.md`
-- `DD-MM-YYYY-emails-sent.md`
-
-Each email is formatted as:
-```markdown
-## Subject line
-**From:** sender@example.com
-**To:** recipient@example.com
-**Date:** DD-MM-YYYY HH:MM
-
-Body text...
-
----
-```
-
-**Filtering:**
-- Emails from/to addresses matching any pattern in `ignored_senders` are skipped
-- Calendar meeting invites (emails with a `text/calendar` part) are skipped automatically
-
-```bash
-python3 prod-agent-mail.py
 ```
 
 ---
@@ -186,13 +116,9 @@ tags:
 - Updated misleading print messages and documentation regarding the search window
 
 ### v0.1.3
-- Added `prod-agent-chat.py` — exports Google Chat messages to markdown
 - Added `prod-agent-meet.py` — exports Google Meet Gemini notes and transcripts to markdown
-- Added `prod-agent-mail.py` — exports Gmail sent/received emails to markdown
-- Added `config.json` support across all scripts for filtering ignored spaces, meetings, and senders
-- Output files now written to dedicated folders: `Google Chat/`, `Google Meet/`, `Google Mail/`
-- Added `user_mapping.json` and `space_mapping.json` support in chat script
-- Message timestamps formatted as `DD-MM-YYYY` (en-GB)
+- Added `config.json` support for filtering ignored meetings
+- Output files written to `Google Meet/`
 
 ### v0.1.2
 - Increased file size limit from 1 MB to 5 MB
