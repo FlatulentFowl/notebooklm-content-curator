@@ -1,0 +1,19 @@
+.DS_Store
+.env
+
+test/
+raw/
+
+
+# Local config — may contain email addresses, user IDs, space IDs
+user_mapping.json
+space_mapping.json
+
+# OAuth tokens and credentials — never commit these
+*.token.json
+google-*-token.json
+credentials.json
+
+.venv/
+__pycache__/
+*.pyc
