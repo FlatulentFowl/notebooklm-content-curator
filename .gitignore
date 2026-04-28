@@ -5,7 +5,9 @@ test/
 raw/
 
 
-# Local config — may contain email addresses, user IDs, space IDs
+# Local config — may contain personal data (names, email addresses, user IDs)
+settings.json
+config.json
 user_mapping.json
 space_mapping.json
 

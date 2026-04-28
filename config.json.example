@@ -1,0 +1,16 @@
+{
+  "primary_user": [
+    "YOUR NAME"
+  ],
+  "ignored_meetings": [],
+  "podcast_playlists": [
+    {
+      "name": "Podcast 1",
+      "url": "https://youtube.com/playlist?list=ABX-123"
+    },
+    {
+      "name": "Podcast 2",
+      "url": "https://youtube.com/playlist?list=ABC-456"
+    }
+  ]
+}

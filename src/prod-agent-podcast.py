@@ -1,21 +1,17 @@
 import argparse
-import json
 import os
 import re
 
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 
-CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
+from agent_utils import load_config
+
 RAW_DIR = os.path.expanduser('~/scm-coe/raw/transcripts/podcast')
 
 
 def load_playlists():
-    if not os.path.exists(CONFIG_FILE):
-        return []
-    with open(CONFIG_FILE, encoding='utf-8') as f:
-        config = json.load(f)
-    return config.get('podcast_playlists', [])
+    return load_config().get('podcast_playlists', [])
 
 
 def get_most_recent_video(playlist_url):
@@ -124,10 +120,10 @@ def process_video(video_url, name, out_dir):
 
 def main():
     parser = argparse.ArgumentParser(description='Fetch the most recent podcast transcript from YouTube playlists.')
-    parser.add_argument('--playlist', help='Single playlist URL to process (overrides config.json)')
+    parser.add_argument('--playlist', help='Single playlist URL to process (overrides settings.json)')
     parser.add_argument('--video', help='Single video URL to fetch transcript for')
     parser.add_argument('--name', default='Podcast', help='Name for the playlist/video when using --playlist or --video')
-    parser.add_argument('--out', default=RAW_DIR, help='Output directory (default: raw)')
+    parser.add_argument('--out', default=RAW_DIR, help='Output directory (default: ~/scm-coe/raw/transcripts/podcast)')
     args = parser.parse_args()
 
     if args.video:
@@ -140,7 +136,7 @@ def main():
 
     playlists = load_playlists()
     if not playlists:
-        print('No playlists found in config.json. Use --playlist to specify one.')
+        print('No playlists found in settings.json. Use --playlist to specify one.')
         return
 
     for entry in playlists:
