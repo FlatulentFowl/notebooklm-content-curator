@@ -7,7 +7,11 @@ from youtube_transcript_api import YouTubeTranscriptApi
 
 from agent_utils import load_config
 
-RAW_DIR = os.path.expanduser('~/scm-coe/raw/transcripts/podcast')
+_FALLBACK_OUT_DIR = '~/scm-coe/raw/transcripts/podcast'
+
+
+def _get_out_dir():
+    return os.path.expanduser(load_config().get('podcast_output_dir', _FALLBACK_OUT_DIR))
 
 
 def load_playlists():
