@@ -1,114 +1,46 @@
-# CLAUDE.md — Productivity Agent
+# **Productivity Agent \- AI Developer Context**
 
-Project-level instructions for Claude Code. These override default behaviour for this repository.
+Welcome. If you are an AI Coding Assistant, Cursor, Claude, Gemini, or any other LLM interacting with this repository, this document contains your **core system instructions**. You must adhere to these principles at all times.
 
----
+## **1\. The Core Mission (The "Why")**
 
-## Project Overview
+This system is built for a busy ERP consultant specializing in NetSuite and Supply Chain Management (SCM). The project exists to solve high cognitive load via:
 
-A suite of Python 3.12 automation scripts that wire together Google Workspace, YouTube, and local markdown files into a daily productivity workflow. All scripts share a common credential/config layer in `agent_utils.py`.
+* **Cognitive Offloading:** Automatically extracting commitments and action items from unstructured sources (Google Meet transcripts, Gemini Smart Notes, local Markdown) and routing them to a structured hub (Google Tasks).  
+* **Knowledge Pipeline Automation:** Continuously fetching domain-specific intelligence (SCM trends, NetSuite updates via podcasts/YouTube) to learning engines like NotebookLM.  
+* **Ecosystem Bridging:** Seamlessly connecting Google Workspace, local file systems, and external APIs.
 
-```
-prod-agent-meet.py        Google Meet Gemini notes → Google Tasks
-prod-agent-tasks.py       Checkbox notes → subtasks (destructive: clears notes)
-prod-agent-notebooklm.py  Tagged markdown files → Google Drive / NotebookLM
-prod-agent-podcast.py     YouTube playlists → local transcript markdown files
-agent_utils.py            Shared OAuth, date range, and config utilities
-setup-auth.py             One-time OAuth consent flow (run manually)
-```
+## **2\. Development Philosophy & Roadmap (The "How")**
 
----
+We are employing a strict "Crawl, Walk, Run" phased approach.
 
-## Key Conventions
+* **PHASE 1 (Current State): Rock-Solid Modular Tools**  
+  * We are currently building highly reliable, deterministic, and stable tools.  
+  * **Strict Modularity is Required:** Procedural "spaghetti" scripts are forbidden. You must actively refactor existing procedural code (e.g., prod-agent-meet.py, prod-agent-tasks.py) into dedicated, reusable service classes.  
+  * **Separation of Concerns:** Business logic (parsing text) must be strictly separated from API execution (calling Google).  
+* **PHASE 2 (Future State): The Agent Swarm**  
+  * Once the V1 tools are perfectly stable, we will introduce a probabilistic LLM Agent to autonomously orchestrate these tools. *All V1 refactoring must serve this eventual goal by exposing clean, predictable tool interfaces.*
 
-### Dry-run first
+## **3\. Security & Hardening (Zero Exceptions)**
 
-Every script that writes or deletes data has a `--dry-run` flag. Always suggest running with `--dry-run` before suggesting a real run. `prod-agent-tasks.py` is the most destructive — it permanently clears task notes after promoting checkboxes.
+Because this system handles enterprise consulting notes, security is paramount to prevent vulnerabilities:
 
-### Config lives in `settings.json`
+* **No Hardcoded Credentials:** Never suggest or write code that hardcodes API keys, tokens, or secrets.  
+* **Secure OAuth Handling:** Follow strict least-privilege principles. Reference .env.example and settings.json.example.  
+* **Input Validation:** Always sanitize and validate inputs, especially when parsing external Markdown or transcripts.  
+* **Robust Error Handling:** Do not allow silent failures. Implement exponential backoff for APIs and log errors explicitly.
 
-User config (name, ignored meetings, podcast playlists) is in `settings.json` in the project root. It is gitignored. Access it only via `agent_utils.load_config()` — never read it directly in scripts. Never suggest adding it to git.
+## **4\. Technical Environment & Commands**
 
-### Credentials are never in the repo
+* **Language & Management:** Python 3.x using uv (Refer to pyproject.toml and uv.lock).  
+* **Setup Authentication:** uv run src/setup-auth.py  
+* **Run the Application:** uv run src/prod-agent.py  
+* **Security Scanning:** uv run scripts/security-scan.py (Must be run to verify no exposed secrets or vulnerabilities).
 
-The following are gitignored and must stay that way:
+## **5\. AI Workflow & State Management Rules**
 
-- `settings.json` — personal config
-- `credentials.json` — OAuth client secrets (downloaded from Google Cloud Console)
-- `google-*-token.json` — per-script OAuth tokens (stored in `GOOGLE_CONFIG_DIR`)
-- `.env` — environment variables
+To maintain context across sessions, you must interact with the following files:
 
-### Path convention for src/ scripts
-
-`agent_utils.py` derives the project root as the parent of `src/` so that `.env` and `settings.json` are always resolved relative to the repository root, not `src/`. Scripts in `src/` that import `agent_utils` inherit this automatically. `setup-auth.py` does not import `agent_utils`, so it resolves the project root directly.
-
-### Date handling
-
-All date logic uses SAST (UTC+2). The default mode for `prod-agent-meet.py` is "previous weekday" — Friday on Mondays. Override with `--date DD/MM/YYYY` or `--date today`.
-
-### No new scripts without `--dry-run`
-
-Any new script in `src/` that writes or deletes data must have a `--dry-run` flag before being considered complete.
-
-### Token files
-
-Each script uses its own token file (`google-meet-token.json`, etc.) stored in `GOOGLE_CONFIG_DIR` (default: `~/.config/productivity-agent`). Do not change this pattern.
-
----
-
-## Security Rules
-
-- **Never commit** `settings.json`, `config.json`, `credentials.json`, `.env`, or any `*.token.json`.
-- **Never hardcode** API keys, email addresses, OAuth client IDs/secrets, or personal names in source files.
-- **Never suggest** `git add -A` or `git add .` — always stage files explicitly by name.
-- If you find a credential or personal value hardcoded in a file, flag it immediately before doing anything else.
-- If a file is being added to git and it looks like it may contain personal data, warn the user before proceeding.
-- Run `python3 scripts/security-scan.py` before any commit that changes config loading, credential handling, or `.gitignore`.
-
----
-
-## Agent Planning Workflow
-
-### Use the advisor before committing to an approach
-
-Call `advisor()` before any substantive work — before writing code, before interpreting an ambiguous requirement, before choosing between two approaches. The advisor is a stronger reviewer that sees your full conversation history and can catch blind spots before they become hard-to-reverse mistakes.
-
-**Always call advisor:**
-
-- Before the first significant edit in a session
-- When stuck or getting recurring errors
-- When considering a change of approach
-- When the task is complete (call it, then report to the user)
-
-### Plan mode for multi-file changes
-
-For any change that touches more than two files or has non-obvious ordering dependencies, use `/plan` to write an implementation plan before executing. The plan should include a verification section. Execute only after the user approves the plan.
-
-### Available agents (see AGENTS.md for detail)
-
-| Agent | When to use |
-|---|---|
-| `advisor()` | Before/after substantive work; when stuck |
-| `Explore` subagent | Codebase exploration across multiple files |
-| Security scan | Before going public; after any config/credential change |
-
----
-
-## Testing & Verification
-
-There is no automated test suite. Verify changes by:
-
-1. **Syntax check:** `python3 -m py_compile <file>.py`
-2. **Import check:** `python3 -c "import <module>"`
-3. **Dry-run:** `python3 prod-agent-<name>.py --dry-run`
-4. **Config check:** `python3 -c "from agent_utils import load_config; print(load_config())"`
-
-Do not claim a change is complete without running at least the syntax check.
-
----
-
-## Dependencies
-
-Runtime: Python 3.12, managed via `requirements.txt`.  
-Install: `pip3 install -r requirements.txt`  
-No virtual environment is required — packages are installed to system Python 3.12.
+1. **STATUS.md (The Save Game):** Before writing code, check STATUS.md to see what task is currently active. When you finish a task, you must update STATUS.md to check off the completed item.  
+2. **ARCHITECTURE.md (The Map):** Consult this file for the target state of the codebase. Do not introduce new libraries or structural patterns without aligning them with this document.  
+3. **DECISIONS.md (The Memory):** If we make a significant architectural or security decision, record it here so future AI sessions do not undo the work.
