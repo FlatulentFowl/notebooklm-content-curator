@@ -1,46 +1,52 @@
 # **Productivity Agent \- AI Developer Context**
 
-Welcome. If you are an AI Coding Assistant, Cursor, Claude, Gemini, or any other LLM interacting with this repository, this document contains your **core system instructions**. You must adhere to these principles at all times.
+Welcome. If you are an AI Coding Assistant (Claude, Cursor, Gemini, etc.) interacting with this repository, this document contains your **core system instructions and project context**. You must adhere to these principles at all times.
 
-## **1\. The Core Mission (The "Why")**
+## **1\. Project Context & Mission**
 
-This system is built for a busy ERP consultant specializing in NetSuite and Supply Chain Management (SCM). The project exists to solve high cognitive load via:
+* **Domain:** NetSuite and Supply Chain Management (SCM) consulting.  
+* **Goal:** Reduce cognitive load through automation for understaffed environments.  
+* **Core Loops:** 1\. *Cognitive Offloading:* Extract action items from Meet transcripts/Markdown \-\> Google Tasks.  
+  2\. *Knowledge Automation:* Fetch SCM podcasts/YouTube \-\> NotebookLM.  
+  3\. *Ecosystem Bridging:* Connect Google Workspace, local file systems, and external APIs seamlessly.
 
-* **Cognitive Offloading:** Automatically extracting commitments and action items from unstructured sources (Google Meet transcripts, Gemini Smart Notes, local Markdown) and routing them to a structured hub (Google Tasks).  
-* **Knowledge Pipeline Automation:** Continuously fetching domain-specific intelligence (SCM trends, NetSuite updates via podcasts/YouTube) to learning engines like NotebookLM.  
-* **Ecosystem Bridging:** Seamlessly connecting Google Workspace, local file systems, and external APIs.
+## **2\. Architecture Directives**
 
-## **2\. Development Philosophy & Roadmap (The "How")**
+* **Phase 1 Priority:** Build rock-solid, deterministic, modular tools.  
+* **Service Layer Pattern:** You must actively refactor legacy procedural scripts (prod-agent-\*.py) into strict, isolated service classes.  
+* **Separation of Concerns:** UI, routing, business logic, and data access must be completely isolated from one another. Procedural "spaghetti" scripts are forbidden.
 
-We are employing a strict "Crawl, Walk, Run" phased approach.
+## **3\. Security Constraints (Zero Tolerance)**
 
-* **PHASE 1 (Current State): Rock-Solid Modular Tools**  
-  * We are currently building highly reliable, deterministic, and stable tools.  
-  * **Strict Modularity is Required:** Procedural "spaghetti" scripts are forbidden. You must actively refactor existing procedural code (e.g., prod-agent-meet.py, prod-agent-tasks.py) into dedicated, reusable service classes.  
-  * **Separation of Concerns:** Business logic (parsing text) must be strictly separated from API execution (calling Google).  
-* **PHASE 2 (Future State): The Agent Swarm**  
-  * Once the V1 tools are perfectly stable, we will introduce a probabilistic LLM Agent to autonomously orchestrate these tools. *All V1 refactoring must serve this eventual goal by exposing clean, predictable tool interfaces.*
+* **No Hardcoded Secrets:** NEVER hardcode credentials, API keys, or tokens.  
+* **OAuth:** Enforce least-privilege OAuth handling. Always reference .env.example and settings.json.example for environment structures.  
+* **Validation:** ALWAYS sanitize and validate external inputs (Markdown, transcripts, API payloads).  
+* **Resilience:** Implement exponential backoff for APIs. Do not allow silent failures; log errors explicitly.
 
-## **3\. Security & Hardening (Zero Exceptions)**
+## **4\. Technical Environment**
 
-Because this system handles enterprise consulting notes, security is paramount to prevent vulnerabilities:
+* **Stack:** Python 3.x, uv package manager (refer to pyproject.toml, uv.lock).  
+* **Commands:**  
+  * Setup Auth: uv run src/setup-auth.py  
+  * Run App: uv run src/prod-agent.py  
+  * Run Sec-Scan: uv run scripts/security-scan.py *(Mandatory before finalizing features)*.
 
-* **No Hardcoded Credentials:** Never suggest or write code that hardcodes API keys, tokens, or secrets.  
-* **Secure OAuth Handling:** Follow strict least-privilege principles. Reference .env.example and settings.json.example.  
-* **Input Validation:** Always sanitize and validate inputs, especially when parsing external Markdown or transcripts.  
-* **Robust Error Handling:** Do not allow silent failures. Implement exponential backoff for APIs and log errors explicitly.
+## **5\. Workflow & Orchestration Protocol**
 
-## **4\. Technical Environment & Commands**
+You act as the central orchestrator for the repository. Maintain overarching context using the following state files:
 
-* **Language & Management:** Python 3.x using uv (Refer to pyproject.toml and uv.lock).  
-* **Setup Authentication:** uv run src/setup-auth.py  
-* **Run the Application:** uv run src/prod-agent.py  
-* **Security Scanning:** uv run scripts/security-scan.py (Must be run to verify no exposed secrets or vulnerabilities).
+1. STATUS.md **(The Save Game):** Check this before starting work. Update and check off items immediately upon task completion.  
+2. ARCHITECTURE.md **(The Map):** Align all structural changes or new libraries with this document.  
+3. DECISIONS.md **(The Memory):** Record significant architectural/security decisions here.
 
-## **5\. AI Workflow & State Management Rules**
+**Sub-Agent Delegation:** For complex requests, avoid writing raw code monolithically. Instead, break down the user's intent and explicitly adopt (or instruct the user to invoke) the appropriate specialized persona from the .agents/ directory:
 
-To maintain context across sessions, you must interact with the following files:
-
-1. **STATUS.md (The Save Game):** Before writing code, check STATUS.md to see what task is currently active. When you finish a task, you must update STATUS.md to check off the completed item.  
-2. **ARCHITECTURE.md (The Map):** Consult this file for the target state of the codebase. Do not introduce new libraries or structural patterns without aligning them with this document.  
-3. **DECISIONS.md (The Memory):** If we make a significant architectural or security decision, record it here so future AI sessions do not undo the work.
+| Intent / Trigger | Action (Adopt Persona) | Suggested Model |
+| :---- | :---- | :---- |
+| Design, architecture, or complex planning | .agents/planner.md | Opus / Sonnet |
+| Writing raw code or migrating logic | .agents/coder.md | Sonnet 3.5 |
+| Code cleanup, modularization, Service Layer | .agents/refactoring.md | Sonnet 3.5 |
+| Code review, auth validation, threat modeling | .agents/security.md | Opus |
+| Sandboxing, dependencies, Docker, config | .agents/environment.md | Haiku 3.5 |
+| Unit tests, validation scripts, QA | .agents/testsuite.md | Haiku / Sonnet |
+| README updates, docstrings, API docs | .agents/documenter.md | Haiku 3.5 |
