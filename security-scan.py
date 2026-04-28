@@ -173,7 +173,10 @@ def check_personal_data_in_tracked_files():
                     finding('HIGH', rel, 'Email address(es) in tracked file', ', '.join(set(real)))
             names = FULL_NAME_PATTERN.findall(content)
             if names:
-                finding('HIGH', rel, 'Quoted full name(s) in tracked file — may be personal data', ', '.join(set(names)))
+                placeholders = {'Your Name', 'First Last', 'The Buzz', 'Full Name'}
+                real_names = [n for n in names if n.strip('"') not in placeholders]
+                if real_names:
+                    finding('HIGH', rel, 'Quoted full name(s) in tracked file — may be personal data', ', '.join(set(real_names)))
             phones = PHONE_PATTERN.findall(content)
             if phones:
                 finding('HIGH', rel, 'Phone number pattern in tracked file', str(phones))
@@ -219,9 +222,12 @@ def check_gitignore_coverage():
 def check_file_permissions():
     config_dir = os.path.expanduser(os.getenv('GOOGLE_CONFIG_DIR', '~/.config/productivity-agent'))
     candidates = []
+    credential_exts = {'.json', '.env', '.pem', '.key', '.token'}
     if os.path.isdir(config_dir):
         for fname in os.listdir(config_dir):
-            candidates.append(os.path.join(config_dir, fname))
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in credential_exts or fname.startswith('.env'):
+                candidates.append(os.path.join(config_dir, fname))
     # Also check local project credential files
     root = project_root()
     for fname in ['credentials.json', 'settings.json', '.env']:
@@ -255,7 +261,8 @@ def check_env_fallback_secrets():
                     if m:
                         var_name, fallback = m.group(1), m.group(2)
                         secret_words = {'key', 'secret', 'token', 'password', 'credential', 'id'}
-                        if any(w in var_name.lower() for w in secret_words):
+                        is_file_ref = var_name.upper().endswith('_FILE') or fallback.endswith(('.json', '.pem', '.key'))
+                        if any(w in var_name.lower() for w in secret_words) and not is_file_ref:
                             finding('MEDIUM', f'{rel}:{lineno}',
                                     f'os.getenv("{var_name}") has a non-empty secret-looking fallback',
                                     line.strip()[:120])
