@@ -1,3 +1,6 @@
+# TODO: Merge config.json and settings.json into one file.
+# TODO: Set the RAW_DIR to be stored in the settings.json file file. 
+
 import argparse
 import json
 import os
@@ -8,7 +11,6 @@ from youtube_transcript_api import YouTubeTranscriptApi
 
 CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 RAW_DIR = os.path.expanduser('~/scm-coe/raw/transcripts/podcast')
-
 
 def load_playlists():
     if not os.path.exists(CONFIG_FILE):
