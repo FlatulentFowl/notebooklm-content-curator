@@ -7,7 +7,7 @@ name = "productivity-agent"
 version = "0.1.5"
 description = "A suite of scripts that connect your Google Workspace activity to Google Tasks."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.12"
 authors = [
     { name = "Rhys" },
 ]
@@ -33,6 +33,7 @@ dev = [
 package-dir = {"" = "src"}
 py-modules = ["agent_utils"]
 script-files = [
+    "src/prod-agent.py",
     "src/prod-agent-meet.py",
     "src/prod-agent-tasks.py",
     "src/prod-agent-notebooklm.py",
