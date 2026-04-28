@@ -49,7 +49,10 @@ A dedicated Python script that audits the codebase for privacy and security issu
 ### Running the scan
 
 ```bash
-python3 security-scan.py
+python3 scripts/security-scan.py
+
+# Exit 1 on any MEDIUM or higher finding (stricter mode)
+python3 scripts/security-scan.py --strict
 ```
 
 ### What it checks
@@ -57,19 +60,20 @@ python3 security-scan.py
 | Category | Checks |
 |---|---|
 | **Hardcoded secrets** | Patterns matching API keys, OAuth tokens, client IDs/secrets, passwords, bearer tokens |
-| **Personal data** | Email addresses, names in the format `"First Last"`, phone number patterns |
-| **Git tracking** | Which sensitive files (credentials, tokens, config) are currently tracked |
+| **Personal data** | Email addresses, names in the format `"First Last"`, phone number patterns (in tracked files only) |
+| **Git tracking** | Whether sensitive files (credentials, tokens, config) are currently tracked |
 | **Git history** | Whether any sensitive files appear anywhere in commit history |
-| **Gitignore coverage** | Whether known-sensitive filenames are covered |
-| **File permissions** | Whether credential files have overly permissive modes (should be 600) |
-| **Environment leaks** | `os.getenv()` calls with hardcoded fallback secrets |
+| **Gitignore coverage** | Whether known-sensitive filenames are covered by `.gitignore` |
+| **File permissions** | Whether credential files in `GOOGLE_CONFIG_DIR` have overly permissive modes (should be 600) |
+| **Environment leaks** | `os.getenv()` calls with hardcoded secret-looking fallback values |
+| **Direct config reads** | Scripts that read `settings.json` directly instead of using `agent_utils.load_config()` |
 
 ### Severity levels
 
-- **CRITICAL** — active credential or secret exposed in a tracked file or git history
-- **HIGH** — personal data in a tracked file; file that should be gitignored is not
+- **CRITICAL** — active credential or secret exposed in a tracked file
+- **HIGH** — personal data in a tracked file; sensitive file in git history
 - **MEDIUM** — overly permissive file permissions; missing gitignore entry
-- **LOW** — suspicious pattern that may be a false positive; informational finding
+- **LOW** — suspicious pattern that may be a false positive; direct config file access
 
 ### Interpreting results
 
@@ -99,7 +103,7 @@ Use direct `grep` or `Read` when:
 | Situation | Action |
 |---|---|
 | Multi-file implementation | `/plan` → advisor → implement → advisor |
-| Security-sensitive change | `advisor()` → implement → `python3 security-scan.py` |
+| Security-sensitive change | `advisor()` → implement → `python3 scripts/security-scan.py` |
 | Unfamiliar area of codebase | Spawn `Explore` subagent |
 | Stuck or blocked | `advisor()` with full context of what's been tried |
 | Task complete | Write result → `advisor()` → report to user |

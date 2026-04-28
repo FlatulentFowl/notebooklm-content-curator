@@ -9,12 +9,16 @@ Project-level instructions for Claude Code. These override default behaviour for
 A suite of Python 3.12 automation scripts that wire together Google Workspace, YouTube, and local markdown files into a daily productivity workflow. All scripts share a common credential/config layer in `agent_utils.py`.
 
 ```
-prod-agent-meet.py        Google Meet Gemini notes → Google Tasks
-prod-agent-tasks.py       Checkbox notes → subtasks (destructive: clears notes)
-prod-agent-notebooklm.py  Tagged markdown files → Google Drive / NotebookLM
-prod-agent-podcast.py     YouTube playlists → local transcript markdown files
-agent_utils.py            Shared OAuth, date range, and config utilities
-setup-auth.py             One-time OAuth consent flow (run manually)
+src/
+  prod-agent-meet.py        Google Meet Gemini notes → Google Tasks
+  prod-agent-tasks.py       Checkbox notes → subtasks (destructive: clears notes)
+  prod-agent-notebooklm.py  Tagged markdown files → Google Drive / NotebookLM
+  prod-agent-podcast.py     YouTube playlists → local transcript markdown files
+  agent_utils.py            Shared OAuth, date range, and config utilities
+  setup-auth.py             One-time OAuth consent flow (run manually)
+
+scripts/
+  security-scan.py          Privacy and security audit script
 ```
 
 ---
@@ -30,15 +34,18 @@ User config (name, ignored meetings, podcast playlists) is in `settings.json` in
 ### Credentials are never in the repo
 The following are gitignored and must stay that way:
 - `settings.json` — personal config
-- `credentials.json` — OAuth token (written by `setup-auth.py`)
-- `google-*-token.json` — per-script tokens (stored in `GOOGLE_CONFIG_DIR`)
+- `credentials.json` — OAuth client secrets (downloaded from Google Cloud Console)
+- `google-*-token.json` — per-script OAuth tokens (stored in `GOOGLE_CONFIG_DIR`)
 - `.env` — environment variables
+
+### Path convention for src/ scripts
+`agent_utils.py` derives the project root as the parent of `src/` so that `.env` and `settings.json` are always resolved relative to the repository root, not `src/`. Scripts in `src/` that import `agent_utils` inherit this automatically. `setup-auth.py` does not import `agent_utils`, so it resolves the project root directly.
 
 ### Date handling
 All date logic uses SAST (UTC+2). The default mode for `prod-agent-meet.py` is "previous weekday" — Friday on Mondays. Override with `--date DD/MM/YYYY` or `--date today`.
 
-### No new top-level scripts without `--dry-run`
-Any new script that writes or deletes data must have a `--dry-run` flag before being considered complete.
+### No new scripts without `--dry-run`
+Any new script in `src/` that writes or deletes data must have a `--dry-run` flag before being considered complete.
 
 ### Token files
 Each script uses its own token file (`google-meet-token.json`, etc.) stored in `GOOGLE_CONFIG_DIR` (default: `~/.config/productivity-agent`). Do not change this pattern.
@@ -49,10 +56,10 @@ Each script uses its own token file (`google-meet-token.json`, etc.) stored in `
 
 - **Never commit** `settings.json`, `config.json`, `credentials.json`, `.env`, or any `*.token.json`.
 - **Never hardcode** API keys, email addresses, OAuth client IDs/secrets, or personal names in source files.
-- **Never suggest** `git add -A` or `git add .` — always stage files explicitly.
+- **Never suggest** `git add -A` or `git add .` — always stage files explicitly by name.
 - If you find a credential or personal value hardcoded in a file, flag it immediately before doing anything else.
 - If a file is being added to git and it looks like it may contain personal data, warn the user before proceeding.
-- Run `/security-review` or the `security-scan.py` script (see AGENTS.md) before any commit that changes config loading, credential handling, or `.gitignore`.
+- Run `python3 scripts/security-scan.py` before any commit that changes config loading, credential handling, or `.gitignore`.
 
 ---
 
@@ -86,10 +93,11 @@ For any change that touches more than two files or has non-obvious ordering depe
 
 There is no automated test suite. Verify changes by:
 
-1. **Syntax check:** `python3 -m py_compile <file>.py`
-2. **Import check:** `python3 -c "import <module>"`
-3. **Dry-run:** `python3 prod-agent-<name>.py --dry-run`
-4. **Config check:** `python3 -c "from agent_utils import load_config; print(load_config())"`
+1. **Syntax check:** `python3 -m py_compile src/<file>.py`
+2. **Import check:** `python3 -c "import sys; sys.path.insert(0, 'src'); import agent_utils"`
+3. **Dry-run:** `python3 src/prod-agent-<name>.py --dry-run`
+4. **Config check:** `python3 -c "import sys; sys.path.insert(0, 'src'); from agent_utils import load_config; print(load_config())"`
+5. **Security scan:** `python3 scripts/security-scan.py`
 
 Do not claim a change is complete without running at least the syntax check.
 
@@ -97,6 +105,6 @@ Do not claim a change is complete without running at least the syntax check.
 
 ## Dependencies
 
-Runtime: Python 3.12, managed via `requirements.txt`.  
-Install: `pip3 install -r requirements.txt`  
+Runtime: Python 3.12, managed via `pyproject.toml` and `requirements.txt`.
+Install: `pip3 install -r requirements.txt`
 No virtual environment is required — packages are installed to system Python 3.12.
