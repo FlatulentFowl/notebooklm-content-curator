@@ -94,7 +94,7 @@ def run(cmd):
 
 
 def project_root():
-    return os.path.dirname(os.path.abspath(__file__))
+    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def git_tracked_files():

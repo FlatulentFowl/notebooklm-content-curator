@@ -1,11 +1,8 @@
 import os
 
-from dotenv import load_dotenv
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from agent_utils import get_credentials
-
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',

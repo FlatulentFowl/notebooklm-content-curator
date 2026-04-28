@@ -8,7 +8,8 @@ from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_PROJECT_ROOT, '.env'))
 
 CONFIG_DIR = os.path.expanduser(os.getenv('GOOGLE_CONFIG_DIR', '~/.config/productivity-agent'))
 
@@ -107,8 +108,8 @@ def get_yesterday_range() -> Optional[tuple]:
 
 
 def load_config() -> dict:
-    """Load config.json from the same directory as this module. Returns {} if not found."""
-    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    """Load settings.json from the project root. Returns {} if not found."""
+    config_path = os.path.join(_PROJECT_ROOT, 'settings.json')
     if os.path.exists(config_path):
         with open(config_path, 'r') as f:
             return json.load(f)

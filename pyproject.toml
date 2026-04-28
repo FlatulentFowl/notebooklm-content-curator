@@ -30,12 +30,13 @@ dev = [
 ]
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = ["agent_utils"]
 script-files = [
-    "prod-agent-meet.py",
-    "prod-agent-tasks.py",
-    "prod-agent-notebooklm.py",
-    "prod-agent-postcast.py",
-    "setup-auth.py",
-    "security-scan.py",
+    "src/prod-agent-meet.py",
+    "src/prod-agent-tasks.py",
+    "src/prod-agent-notebooklm.py",
+    "src/prod-agent-podcast.py",
+    "src/setup-auth.py",
+    "scripts/security-scan.py",
 ]
