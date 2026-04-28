@@ -1,3 +1,4 @@
+import argparse
 import re
 
 from googleapiclient.discovery import build
@@ -58,6 +59,14 @@ def clear_task_notes(service, tasklist_id, task):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Preview changes without creating subtasks or clearing notes')
+    args = parser.parse_args()
+
+    if args.dry_run:
+        print('Dry run mode — no changes will be made.\n')
+
     creds = get_credentials('google-tasks-token.json', SCOPES)
 
     try:
@@ -93,20 +102,25 @@ def main():
 
                 task_id = task['id']
                 task_title = task.get('title', 'Untitled Task')
-                print(f'\n[{list_title}] Task: "{task_title}"')
+                print(f'\n[Task List ID: {list_id}] Task ID: "{task_id}"')
                 print(f'  Found {len(matches)} checkbox line(s) to convert to subtasks:')
 
                 for subtask_title in matches:
                     subtask_title = subtask_title.strip()
-                    created = create_subtask(service, list_id, task_id, subtask_title)
-                    print(f'  + Created subtask: "{created.get("title")}"')
+                    if args.dry_run:
+                        print(f'  + Would create subtask: "{subtask_title}"')
+                    else:
+                        created = create_subtask(service, list_id, task_id, subtask_title)
+                        print(f'  + Created subtask ID: "{created.get("id")}"')
                     total_subtasks_created += 1
 
-                clear_task_notes(service, list_id, task)
-                print(f'  Cleared notes for "{task_title}"')
+                if not args.dry_run:
+                    clear_task_notes(service, list_id, task)
+                    print(f'  Cleared notes for task ID "{task_id}"')
 
+        verb = 'Would create' if args.dry_run else 'Created'
         if total_subtasks_created:
-            print(f'\nDone. Created {total_subtasks_created} subtask(s) total.')
+            print(f'\nDone. {verb} {total_subtasks_created} subtask(s) total.')
         else:
             print('\nNo checkbox lines found in any open task notes.')
 

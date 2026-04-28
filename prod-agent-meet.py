@@ -130,8 +130,10 @@ def create_task_with_subtasks(tasks_service, tasklist_id, title, subtask_titles)
 def main():
     """Finds Google Meet Gemini next steps and creates Google Tasks from them."""
     parser = argparse.ArgumentParser()
-    parser.add_argument('-date', dest='date', default=None,
+    parser.add_argument('--date', dest='date', default=None,
                         help="Date to search: DD/MM/YYYY, 'today', or omit for previous weekday")
+    parser.add_argument('--dry-run', action='store_true',
+                        help="Print what would be created without creating tasks")
     args = parser.parse_args()
 
     creds = get_credentials('google-meet-token.json', SCOPES)
@@ -146,7 +148,7 @@ def main():
         ignored_meetings = config_data.get('ignored_meetings', [])
         primary_user = config_data.get('primary_user', [])
 
-        tasklist_id = get_default_tasklist(tasks_service)
+        tasklist_id = None if args.dry_run else get_default_tasklist(tasks_service)
 
         # Calculate the target date range (SAST)
         result = get_date_range(args.date)
@@ -208,16 +210,15 @@ def main():
             except ValueError:
                 formatted_date = event_start[:10]
 
-            print(f"\nProcessing: {event_title} ({formatted_date})")
+            print(f"\nProcessing event ID: {event_id} ({formatted_date})")
 
             for attachment in doc_attachments:
                 file_id = attachment.get('fileId')
-                file_title = attachment.get('title', 'Untitled')
 
                 if not file_id:
                     continue
 
-                print(f"  Reading: {file_title}")
+                print(f"  Reading doc ID: {file_id}")
 
                 try:
                     doc = docs_service.documents().get(
@@ -225,7 +226,7 @@ def main():
                         includeTabsContent=True
                     ).execute()
                 except Exception as e:
-                    print(f"  Could not read '{file_title}': {e}")
+                    print(f"  Could not read doc ID '{file_id}': {e}")
                     continue
 
                 tabs = doc.get('tabs', [])
@@ -247,14 +248,21 @@ def main():
 
                 if action_items:
                     task_title = f"{event_title} ({formatted_date})"
-                    create_task_with_subtasks(tasks_service, tasklist_id, task_title, action_items)
-                    print(f"  Created task '{task_title}' with {len(action_items)} subtask(s).")
-                    tasks_created += 1
+                    if args.dry_run:
+                        print(f"  [DRY RUN] Would create task: {task_title}")
+                        for item in action_items:
+                            print(f"    - Subtask: {item}")
+                        tasks_created += 1
+                    else:
+                        create_task_with_subtasks(tasks_service, tasklist_id, task_title, action_items)
+                        print(f"  Created task for event ID {event_id} with {len(action_items)} subtask(s).")
+                        tasks_created += 1
                 else:
                     print(f"    No Next Steps content found — skipping.")
 
         if tasks_created:
-            print(f"\n{tasks_created} task(s) created in Google Tasks.")
+            verb = 'would be created' if args.dry_run else 'created'
+            print(f"\n{tasks_created} task(s) {verb} in Google Tasks.")
         else:
             print("\nNo Gemini notes found on any calendar events.")
 

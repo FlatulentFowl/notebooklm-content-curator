@@ -4,12 +4,13 @@ needed across every productivity agent. Opens a browser for consent, then
 saves the authorized token to credentials.json in this directory.
 """
 
+import json
 import os
 
 from dotenv import load_dotenv
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 SCOPES = [
     # Tasks
@@ -33,10 +34,9 @@ if not os.path.exists(CLIENT_SECRETS):
 flow = InstalledAppFlow.from_client_secrets_file(CLIENT_SECRETS, SCOPES)
 creds = flow.run_local_server(port=0)
 
-import json
 creds_data = json.loads(creds.to_json())
 creds_data['type'] = 'authorized_user'
-with open(OUTPUT, 'w') as f:
+with os.fdopen(os.open(OUTPUT, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as f:
     json.dump(creds_data, f, indent=2)
 
 print(f'Saved credentials to {OUTPUT}')

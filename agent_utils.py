@@ -1,16 +1,16 @@
 import datetime
 import json
 import os
+from typing import Optional
 
 from dotenv import load_dotenv
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 CONFIG_DIR = os.path.expanduser(os.getenv('GOOGLE_CONFIG_DIR', '~/.config/productivity-agent'))
-LOCAL_CREDENTIALS_PATH = os.getenv('GOOGLE_CREDENTIALS_FILE', 'credentials.json')
 
 def get_credentials(token_filename: str, scopes: list) -> Credentials:
     """Standard OAuth2 credential flow for productivity agents.
@@ -22,16 +22,8 @@ def get_credentials(token_filename: str, scopes: list) -> Credentials:
         token_filename: Token filename only (e.g. 'google-chat-token.json').
         scopes: List of OAuth2 scope strings.
     """
-    if os.path.exists(LOCAL_CREDENTIALS_PATH):
-        with open(LOCAL_CREDENTIALS_PATH) as f:
-            data = json.load(f)
-        if data.get('type') == 'authorized_user':
-            creds = Credentials.from_authorized_user_info(data, scopes)
-            if not creds.valid:
-                creds.refresh(Request())
-            return creds
-
     os.makedirs(CONFIG_DIR, exist_ok=True)
+    os.chmod(CONFIG_DIR, 0o700)
     token_path = os.path.join(CONFIG_DIR, token_filename)
     creds_path = os.path.join(CONFIG_DIR, 'credentials.json')
 
@@ -44,7 +36,7 @@ def get_credentials(token_filename: str, scopes: list) -> Credentials:
         else:
             flow = InstalledAppFlow.from_client_secrets_file(creds_path, scopes)
             creds = flow.run_local_server(port=0)
-        with open(token_path, 'w') as token:
+        with os.fdopen(os.open(token_path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600), 'w') as token:
             token.write(creds.to_json())
     return creds
 
@@ -54,7 +46,7 @@ SAST_TZ = datetime.timezone(datetime.timedelta(hours=2), name="SAST")
 WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
 
 
-def get_date_range(date_str: str | None = None) -> tuple | None:
+def get_date_range(date_str: Optional[str] = None) -> Optional[tuple]:
     """Return (start_of_target_day, end_of_target_day) in SAST for the requested date.
 
     Args:
@@ -71,18 +63,12 @@ def get_date_range(date_str: str | None = None) -> tuple | None:
 
     if date_str.lower() == 'today':
         target_date = datetime.datetime.now(SAST_TZ).date()
-        skip_weekends = False
     else:
         try:
             target_date = datetime.datetime.strptime(date_str, "%d/%m/%Y").date()
         except ValueError:
             print(f"Invalid date format '{date_str}'. Expected DD/MM/YYYY, or 'today'.")
             return None
-        skip_weekends = False
-
-    if skip_weekends and target_date.weekday() >= 5:
-        print(f"Target date was {WEEKDAY_NAMES[target_date.weekday()]} ({target_date}). Skipping — weekends are not processed.")
-        return None
 
     start = datetime.datetime(target_date.year, target_date.month, target_date.day,
                               0, 0, 0, tzinfo=SAST_TZ)
@@ -92,7 +78,7 @@ def get_date_range(date_str: str | None = None) -> tuple | None:
     return start, end
 
 
-def get_yesterday_range() -> tuple | None:
+def get_yesterday_range() -> Optional[tuple]:
     """Return (start_of_target_day, end_of_target_day) in SAST for the previous weekday.
 
     If today is Monday, it looks back 3 days to the previous Friday.
@@ -121,8 +107,9 @@ def get_yesterday_range() -> tuple | None:
 
 
 def load_config() -> dict:
-    """Load config.json from the current working directory. Returns {} if not found."""
-    if os.path.exists('config.json'):
-        with open('config.json', 'r') as f:
+    """Load config.json from the same directory as this module. Returns {} if not found."""
+    config_path = os.path.join(os.path.dirname(__file__), 'config.json')
+    if os.path.exists(config_path):
+        with open(config_path, 'r') as f:
             return json.load(f)
     return {}

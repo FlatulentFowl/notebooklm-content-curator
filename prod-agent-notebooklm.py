@@ -5,7 +5,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from agent_utils import get_credentials
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(__file__), '.env'))
 
 SCOPES = [
     'https://www.googleapis.com/auth/drive.file',
@@ -97,6 +97,15 @@ def main():
                     continue
 
                 file_path = os.path.join(root, file)
+                
+                if os.path.islink(file_path):
+                    continue
+                try:
+                    if os.path.getsize(file_path) > 50 * 1024 * 1024: # 50MB limit
+                        continue
+                except OSError:
+                    continue
+                
                 if file_has_tag(file_path, TAG):
                     found_any = True
                     upload_to_drive(service, file_path, DRIVE_FOLDER_ID, dry_run=args.dry_run)

@@ -6,7 +6,7 @@ import re
 import yt_dlp
 from youtube_transcript_api import YouTubeTranscriptApi
 
-CONFIG_FILE = 'config.json'
+CONFIG_FILE = os.path.join(os.path.dirname(__file__), 'config.json')
 RAW_DIR = os.path.expanduser('~/scm-coe/raw/transcripts/podcast')
 
 
@@ -84,12 +84,55 @@ def process_playlist(playlist_name, playlist_url, out_dir):
     print(f'[{playlist_name}] Saved to {filename}')
 
 
+def process_video(video_url, name, out_dir):
+    video_id = re.search(r'(?:v=|youtu\.be/)([^&?/]+)', video_url)
+    if not video_id:
+        raise ValueError(f'Could not extract video ID from URL: {video_url}')
+    video_id = video_id.group(1)
+
+    ydl_opts = {'quiet': True}
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(video_url, download=False)
+    title = info.get('title', video_id)
+    upload_date = info.get('upload_date', '')
+
+    print(f'[{name}] Title: {title}')
+    print(f'[{name}] Video ID: {video_id}')
+
+    os.makedirs(out_dir, exist_ok=True)
+    filename = os.path.join(out_dir, f'{safe_filename(title)}.md')
+
+    if os.path.exists(filename):
+        print(f'[{name}] Skipped (already exists): {filename}')
+        return
+
+    print(f'[{name}] Fetching transcript...')
+    transcript = get_transcript(video_id)
+    body = format_transcript(transcript)
+
+    with open(filename, 'w', encoding='utf-8') as f:
+        f.write(f'# {title}\n\n')
+        if upload_date:
+            f.write(f'**Date:** {upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}\n\n')
+        f.write(f'**Source:** https://www.youtube.com/watch?v={video_id}\n\n')
+        f.write('---\n\n')
+        f.write(body)
+        f.write('\n')
+
+    print(f'[{name}] Saved to {filename}')
+
+
 def main():
     parser = argparse.ArgumentParser(description='Fetch the most recent podcast transcript from YouTube playlists.')
     parser.add_argument('--playlist', help='Single playlist URL to process (overrides config.json)')
-    parser.add_argument('--name', default='Podcast', help='Name for the playlist when using --playlist')
+    parser.add_argument('--video', help='Single video URL to fetch transcript for')
+    parser.add_argument('--name', default='Podcast', help='Name for the playlist/video when using --playlist or --video')
     parser.add_argument('--out', default=RAW_DIR, help='Output directory (default: raw)')
     args = parser.parse_args()
+
+    if args.video:
+        process_video(args.video, args.name, args.out)
+        return
 
     if args.playlist:
         process_playlist(args.name, args.playlist, args.out)
