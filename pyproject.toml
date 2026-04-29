@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "productivity-agent"
-version = "0.1.5"
+version = "0.1.7"
 description = "A suite of scripts that connect your Google Workspace activity to Google Tasks."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -34,13 +34,14 @@ generated-members = ["googleapiclient.*"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
+packages = ["tools"]
 py-modules = ["agent_utils"]
 script-files = [
-    "src/prod_agent.py",
-    "src/prod_agent_meet.py",
-    "src/prod_agent_tasks.py",
-    "src/prod_agent_notebooklm.py",
-    "src/prod_agent_podcast.py",
-    "src/setup_auth.py",
+    "src/prod-agent.py",
+    "src/prod-agent-meet.py",
+    "src/prod-agent-tasks.py",
+    "src/prod-agent-notebooklm.py",
+    "src/prod-agent-podcast.py",
+    "src/setup-auth.py",
     "scripts/security-scan.py",
 ]

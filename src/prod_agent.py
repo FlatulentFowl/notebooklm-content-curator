@@ -28,17 +28,17 @@ def _meet(args):
         extra += ['--date', args.date]
     if getattr(args, 'dry_run', False):
         extra.append('--dry-run')
-    return _run('prod_agent_meet.py', extra)
+    return _run('tools/tool_meet.py', extra)
 
 
 def _tasks(args):
     extra = ['--dry-run'] if getattr(args, 'dry_run', False) else []
-    return _run('prod_agent_tasks.py', extra)
+    return _run('tools/tool_tasks.py', extra)
 
 
 def _notebooklm(args):
     extra = ['--dry-run'] if getattr(args, 'dry_run', False) else []
-    return _run('prod_agent_notebooklm.py', extra)
+    return _run('tools/tool_notebooklm.py', extra)
 
 
 def _podcast(args):
@@ -52,7 +52,7 @@ def _podcast(args):
         extra += ['--name', name]
     if getattr(args, 'out', None):
         extra += ['--out', args.out]
-    return _run('prod_agent_podcast.py', extra)
+    return _run('tools/tool_podcast.py', extra)
 
 
 def _all(args):

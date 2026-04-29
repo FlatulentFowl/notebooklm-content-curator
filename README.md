@@ -4,27 +4,24 @@ A suite of scripts that connect your Google Workspace activity to Google Tasks, 
 
 | Script | What it does |
 | :---- | :---- |
-| prod_agent.py | Main wrapper to run individual agents or execute them all in sequence |
-| prod_agent_meet.py | Extracts assigned Next Steps from Google Meet Gemini notes and creates Google Tasks |
-| prod_agent_tasks.py | Converts \[ \] checkbox items in task notes into subtasks |
-| prod_agent_notebooklm.py | Uploads tagged markdown files to a Google Drive folder for NotebookLM |
-| prod_agent_podcast.py | Fetches transcripts from YouTube playlists or videos and saves them as markdown |
+| prod-agent.py | Main wrapper to run individual agents or execute them all in sequence |
+| prod-agent-meet.py | Extracts assigned Next Steps from Google Meet Gemini notes and creates Google Tasks |
+| prod-agent-tasks.py | Converts \[ \] checkbox items in task notes into subtasks |
+| prod-agent-notebooklm.py | Uploads tagged markdown files to a Google Drive folder for NotebookLM |
+| prod-agent-podcast.py | Fetches transcripts from YouTube playlists or videos and saves them as markdown |
 
 ## **Setup**
 
 ### **1\. Install dependencies**
 
-Since the project includes a pyproject.toml, you can install everything directly:
+This project uses [uv](https://docs.astral.sh/uv/). Install dependencies with:
 
-`pip3 install.`
-
-Alternatively, install the packages manually:
-
-`pip3 install google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client python-dateutil python-dotenv yt-dlp youtube-transcript-api`
+`uv sync`
 
 ### **2\. Configure environment**
 
 Copy .env.example to .env and fill in your values:
+
 ```
 GOOGLE\_CONFIG\_DIR=\~/.config/productivity-agent  
 GOOGLE\_CREDENTIALS\_FILE=credentials.json  
@@ -47,10 +44,10 @@ NOTEBOOKLM\_SOURCE\_DIRS=\~/path/to/notes:\~/other/notes
 3. Enable the APIs you need (see per-script requirements below)  
 4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**  
 5. Choose **Desktop app**, click Create, then **Download JSON**  
-6. Save the downloaded file to `$GOOGLE\_CONFIG\_DIR/credentials.json` 
+6. Save the downloaded file to `$GOOGLE\_CONFIG\_DIR/credentials.json`
 7. Run setup_auth.py to complete the OAuth flow and generate a local credentials.json:
 
-`python3 src/setup_auth.py`
+`python3 src/setup-auth.py`
 
 The first time you run each script, a browser window opens asking you to grant access. Tokens are cached in `$GOOGLE\_CONFIG\_DIR` and won't prompt you again until they expire.
 
@@ -69,8 +66,8 @@ Create a settings.json file in the project directory to configure script behavio
 
 | Key | Used by | Description |
 | :---- | :---- | :---- |
-| primary\_user | prod_agent_meet.py | Names to match when extracting assigned action items from Next Steps |
-| ignored\_meetings | prod_agent_meet.py | Calendar event titles or event IDs to skip |
+| primary\_user | prod-agent-meet.py | Names to match when extracting assigned action items from Next Steps |
+| ignored\_meetings | prod-agent-meet.py | Calendar event titles or event IDs to skip |
 
 ## **Scripts**
 
@@ -81,12 +78,12 @@ You can run scripts individually or use the main wrapper.
 Run all agents sequentially or trigger them one by one.
 
 \# Run all agents (meet → tasks → notebooklm → podcast)  
-`python3 src/prod_agent.py all`
+`python3 src/prod-agent.py all`
 
 \# Dry run (skips podcast)  
-python3 src/prod_agent.py all \--dry-run
+python3 src/prod-agent.py all \--dry-run
 
-### **prod_agent_meet.py — Meet → Tasks**
+### **prod-agent-meet.py — Meet → Tasks**
 
 Fetches calendar events from the previous weekday and reads attached Google Docs for Gemini notes. It grabs bullet points assigned to `primary\_user` under "Next Steps" and creates a Google Task.
 
@@ -94,15 +91,15 @@ Fetches calendar events from the previous weekday and reads attached Google Docs
 
 **Token:** `$GOOGLE\_CONFIG\_DIR/google-meet-token.json`
 
-`python3 src/prod_agent.py meet`
+`python3 src/prod-agent.py meet`
 
 \# Process a specific date  
-`python3 src/prod_agent.py meet \--date 21/04/2025`
+`python3 src/prod-agent.py meet \--date 21/04/2025`
 
 \# Process today  
-`python3 src/prod_agent.py meet \--date today`
+`python3 src/prod-agent.py meet \--date today`
 
-### **prod_agent_tasks.py — Checkbox Notes → Subtasks**
+### **prod-agent-tasks.py — Checkbox Notes → Subtasks**
 
 Scans open Google Tasks for notes containing \[ \] checkboxes. It turns each checkbox into a subtask, then clears the notes field.
 
@@ -110,9 +107,9 @@ Scans open Google Tasks for notes containing \[ \] checkboxes. It turns each che
 
 **Token:** `$GOOGLE\_CONFIG\_DIR/google-tasks-token.json`
 
-`python3 src/prod_agent.py tasks`
+`python3 src/prod-agent.py tasks`
 
-### **prod_agent_notebooklm.py — NotebookLM Sync**
+### **prod-agent-notebooklm.py — NotebookLM Sync**
 
 Scans the directories listed in NOTEBOOKLM\_SOURCE\_DIRS for markdown files tagged with notebooklm-source. It uploads them to your target Drive folder as Google Docs, skipping files that already exist.
 
@@ -120,7 +117,7 @@ Scans the directories listed in NOTEBOOKLM\_SOURCE\_DIRS for markdown files tagg
 
 **Token:** `$GOOGLE\_CONFIG\_DIR/google-notebooklm-token.json`
 
-`python3 src/prod_agent.py notebooklm`
+`python3 src/prod-agent.py notebooklm`
 
 Tag any .md file for syncing by adding a YAML frontmatter block:
 
@@ -129,21 +126,27 @@ tags:
   \- notebooklm-source  
 \---
 
-### **prod_agent_podcast.py — YouTube → Transcripts**
+### **prod-agent-podcast.py — YouTube → Transcripts**
 
 Downloads auto-generated transcripts from a YouTube video or playlist and saves them locally as markdown files.
 
-`python3 src/prod_agent.py podcast \--playlist \<URL\> \--out \~/path/to/save`
+`python3 src/prod-agent.py podcast \--playlist \<URL\> \--out \~/path/to/save`
 
 ## **Changelog**
+
+### **v0.1.7**
+
+* Renamed individual agent scripts to `tool_*.py` naming convention
+* Moved tool scripts into `src/tools/` package
+* Switched install and run instructions from `pip3`/`python3` to `uv`
 
 ### **v0.1.5**
 
 * Moved authentication paths and user-specific config to .env  
 * Removed legacy chat and mail agents  
-* prod_agent_meet.py now creates Google Tasks directly from Next Steps  
-* Added prod_agent_tasks.py — converts task note checkboxes to subtasks  
-* Added prod_agent_podcast.py for YouTube transcript harvesting  
+* prod-agent-meet.py now creates Google Tasks directly from Next Steps  
+* Added prod-agent-tasks.py — converts task note checkboxes to subtasks  
+* Added prod-agent-podcast.py for YouTube transcript harvesting  
 * Switched configuration file from config.json to settings.json  
 * Added main prod_agent.py wrapper script
 
@@ -154,5 +157,5 @@ Downloads auto-generated transcripts from a YouTube video or playlist and saves 
 
 ### **v0.1.3**
 
-* Added prod_agent_meet.py support for Gemini notes  
+* Added prod-agent-meet.py support for Gemini notes  
 * Added configuration support for filtering ignored meetings
