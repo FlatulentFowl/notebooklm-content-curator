@@ -2,11 +2,11 @@
 Main entry point for the productivity agent suite.
 
 Usage:
-  python3 src/prod-agent.py all [--dry-run]
-  python3 src/prod-agent.py meet [--date DATE] [--dry-run]
-  python3 src/prod-agent.py tasks [--dry-run]
-  python3 src/prod-agent.py notebooklm [--dry-run]
-  python3 src/prod-agent.py podcast [--playlist URL] [--video URL] [--name NAME] [--out DIR]
+  python3 src/prod_agent.py all [--dry-run]
+  python3 src/prod_agent.py meet [--date DATE] [--dry-run]
+  python3 src/prod_agent.py tasks [--dry-run]
+  python3 src/prod_agent.py notebooklm [--dry-run]
+  python3 src/prod_agent.py podcast [--playlist URL] [--video URL] [--name NAME] [--out DIR]
 """
 
 import argparse
@@ -19,7 +19,7 @@ _SRC_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _run(script, args):
     cmd = [sys.executable, os.path.join(_SRC_DIR, script)] + args
-    return subprocess.run(cmd).returncode
+    return subprocess.run(cmd, check=False).returncode
 
 
 def _meet(args):
@@ -28,17 +28,17 @@ def _meet(args):
         extra += ['--date', args.date]
     if getattr(args, 'dry_run', False):
         extra.append('--dry-run')
-    return _run('prod-agent-meet.py', extra)
+    return _run('prod_agent_meet.py', extra)
 
 
 def _tasks(args):
     extra = ['--dry-run'] if getattr(args, 'dry_run', False) else []
-    return _run('prod-agent-tasks.py', extra)
+    return _run('prod_agent_tasks.py', extra)
 
 
 def _notebooklm(args):
     extra = ['--dry-run'] if getattr(args, 'dry_run', False) else []
-    return _run('prod-agent-notebooklm.py', extra)
+    return _run('prod_agent_notebooklm.py', extra)
 
 
 def _podcast(args):
@@ -52,7 +52,7 @@ def _podcast(args):
         extra += ['--name', name]
     if getattr(args, 'out', None):
         extra += ['--out', args.out]
-    return _run('prod-agent-podcast.py', extra)
+    return _run('prod_agent_podcast.py', extra)
 
 
 def _all(args):

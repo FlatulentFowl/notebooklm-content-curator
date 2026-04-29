@@ -19,21 +19,21 @@
 
 ### **Google Workspace Services**
 
-* \[ \] **Meet Processing:** Refactor prod-agent-meet.py  
+* \[ \] **Meet Processing:** Refactor prod_agent_meet.py  
   * \[ \] Extract Markdown parsing logic into MarkdownParserService.  
   * \[ \] Extract Google Drive/Meet API logic into GoogleWorkspaceService.  
-* \[ \] **Task & Calendar Sync:** Refactor prod-agent-tasks.py  
+* \[ \] **Task & Calendar Sync:** Refactor prod_agent_tasks.py  
   * \[ \] Extract Google Tasks API logic into TaskService.  
   * \[ \] Extract Google Calendar API logic into CalendarService.
 
 ### **External Ingestion Services**
 
-* \[ \] **Podcast Ingestion:** Refactor prod-agent-podcast.py into a modular PodcastIngestionService.  
-* \[ \] **NotebookLM Sync:** Refactor prod-agent-notebooklm.py into a modular NotebookLMService.
+* \[ \] **Podcast Ingestion:** Refactor prod_agent_podcast.py into a modular PodcastIngestionService.  
+* \[ \] **NotebookLM Sync:** Refactor prod_agent_notebooklm.py into a modular NotebookLMService.
 
 ### **Orchestration Updates**
 
-* \[ \] Refactor prod-agent.py to act as a clean controller importing the new service classes instead of using subprocess.run().
+* \[ \] Refactor prod_agent.py to act as a clean controller importing the new service classes instead of using subprocess.run().
 
 ## **Phase 2: The Agent Swarm (Not Started)**
 

@@ -14,7 +14,7 @@ To ensure testability, modularity, and a clean transition to an LLM Agent Swarm,
 
 ## **Phase 1 Target State (Modular Monolith)**
 
-In Phase 1, we are refactoring the existing prod-agent-\*.py scripts into the following domain-driven services:
+In Phase 1, we are refactoring the existing prod_agent_\*.py scripts into the following domain-driven services:
 
 ### **1\. Core & Infrastructure Services**
 
@@ -23,15 +23,15 @@ In Phase 1, we are refactoring the existing prod-agent-\*.py scripts into the fo
 
 ### **2\. Domain Services**
 
-* src/services/workspace\_service.py (Replaces prod-agent-meet.py logic)  
+* src/services/workspace\_service.py (Replaces prod_agent_meet.py logic)  
   * *Responsibilities:* Interfacing with Google Drive to fetch Meet transcripts and Docs.  
-* src/services/task\_service.py (Replaces prod-agent-tasks.py logic)  
+* src/services/task\_service.py (Replaces prod_agent_tasks.py logic)  
   * *Responsibilities:* Standardizing "Action Items" and syncing them to Google Tasks.  
 * src/services/calendar\_service.py  
   * *Responsibilities:* Reading Google Calendar to determine daily context.  
-* src/services/ingestion\_service.py (Replaces prod-agent-podcast.py logic)  
+* src/services/ingestion\_service.py (Replaces prod_agent_podcast.py logic)  
   * *Responsibilities:* Fetching and standardizing transcripts/audio from YouTube and podcasts.  
-* src/services/knowledge\_service.py (Replaces prod-agent-notebooklm.py logic)  
+* src/services/knowledge\_service.py (Replaces prod_agent_notebooklm.py logic)  
   * *Responsibilities:* Pushing formatted SCM/NetSuite trends into NotebookLM.
 
 ### **3\. Utility Services**
@@ -40,11 +40,11 @@ In Phase 1, we are refactoring the existing prod-agent-\*.py scripts into the fo
 
 ### **4\. The Orchestrator**
 
-* src/prod-agent.py: Instead of using subprocess.run to call other scripts, this file will import the services above and execute them in a deterministic procedural flow (e.g., workspace\_service.get\_transcripts() \-\> markdown\_parser.extract() \-\> task\_service.create\_tasks()).
+* src/prod_agent.py: Instead of using subprocess.run to call other scripts, this file will import the services above and execute them in a deterministic procedural flow (e.g., workspace\_service.get\_transcripts() \-\> markdown\_parser.extract() \-\> task\_service.create\_tasks()).
 
 ## **Phase 2 Target State (The Agent Swarm)**
 
-Once Phase 1 establishes stable, isolated service classes, Phase 2 replaces the deterministic prod-agent.py orchestrator with an LLM-driven Agent.
+Once Phase 1 establishes stable, isolated service classes, Phase 2 replaces the deterministic prod_agent.py orchestrator with an LLM-driven Agent.
 
 * **The LLM Orchestrator (src/agent/controller.py):** An autonomous loop (e.g., using LangChain or native Anthropic/Gemini APIs) that reads the user's daily calendar and decides which tools to invoke.  
 * **Tool Interfaces (src/agent/tools.py):** Wrappers around the Phase 1 Services (e.g., CreateTaskTool(TaskService), FetchSCMTrendsTool(IngestionService)). The LLM calls these tools instead of executing procedural steps.
@@ -59,8 +59,8 @@ productivity-agent/
 │   ├── agent/              \# Phase 2: LLM orchestration and tools  
 │   ├── services/           \# Phase 1: Modular business logic  
 │   ├── utils/              \# Pure functions (parsers, formatters)  
-│   ├── prod-agent.py       \# Phase 1 Controller  
-│   └── setup-auth.py       \# Auth initialization  
+│   ├── prod_agent.py       \# Phase 1 Controller  
+│   └── setup_auth.py       \# Auth initialization  
 ├── .env.example  
 ├── pyproject.toml  
 └── uv.lock  

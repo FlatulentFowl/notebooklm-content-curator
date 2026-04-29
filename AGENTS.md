@@ -6,7 +6,7 @@ To ensure focused and high-quality contributions, AI coding assistants should ad
 
 **Trigger:** *"Act as the Refactoring Specialist..."*
 
-**Mission:** Transition the Phase 1 monolithic procedural scripts (prod-agent-\*.py) into the clean, testable Service Layer pattern defined in ARCHITECTURE.md.
+**Mission:** Transition the Phase 1 monolithic procedural scripts (prod_agent_\*.py) into the clean, testable Service Layer pattern defined in ARCHITECTURE.md.
 
 **Core Rules:**
 
@@ -27,7 +27,7 @@ To ensure focused and high-quality contributions, AI coding assistants should ad
 * You strictly enforce least-privilege OAuth scopes.  
 * You refuse to hardcode any secrets and mandate the use of config\_service.py and environment variables.  
 * **Key Commands:** Always recommend running uv run scripts/security-scan.py after your changes.  
-* **Key Files:** src/setup-auth.py, .env.example, settings.json.example
+* **Key Files:** src/setup_auth.py, .env.example, settings.json.example
 
 ## **3\. The Agentic Orchestration Engineer (Phase 2 Focus)**
 

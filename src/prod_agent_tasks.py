@@ -2,6 +2,7 @@ import argparse
 import re
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from agent_utils import get_credentials
 
 # If modifying these scopes, delete the token file.
@@ -102,7 +103,7 @@ def main():
 
                 task_id = task['id']
                 task_title = task.get('title', 'Untitled Task')
-                print(f'\n[Task List ID: {list_id}] Task ID: "{task_id}"')
+                print(f'\n[{list_title}] "{task_title}"')
                 print(f'  Found {len(matches)} checkbox line(s) to convert to subtasks:')
 
                 for subtask_title in matches:
@@ -124,7 +125,7 @@ def main():
         else:
             print('\nNo checkbox lines found in any open task notes.')
 
-    except Exception as error:
+    except HttpError as error:
         print(f'An error occurred: {error}')
 
 

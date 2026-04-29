@@ -29,15 +29,18 @@ dev = [
     "pylint",
 ]
 
+[tool.pylint.TYPECHECK]
+generated-members = ["googleapiclient.*"]
+
 [tool.setuptools]
 package-dir = {"" = "src"}
 py-modules = ["agent_utils"]
 script-files = [
-    "src/prod-agent.py",
-    "src/prod-agent-meet.py",
-    "src/prod-agent-tasks.py",
-    "src/prod-agent-notebooklm.py",
-    "src/prod-agent-podcast.py",
-    "src/setup-auth.py",
+    "src/prod_agent.py",
+    "src/prod_agent_meet.py",
+    "src/prod_agent_tasks.py",
+    "src/prod_agent_notebooklm.py",
+    "src/prod_agent_podcast.py",
+    "src/setup_auth.py",
     "scripts/security-scan.py",
 ]
