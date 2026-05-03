@@ -1,6 +1,7 @@
 import os
 
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 from agent_utils import get_credentials
 
@@ -33,7 +34,7 @@ def file_has_tag(file_path, tag):
             content = f.read(100000) 
             # Match tag with or without leading #
             return tag in content or f"#{tag}" in content
-    except Exception as e:
+    except OSError as e:
         print(f"Error reading {file_path}: {e}")
         return False
 
@@ -60,7 +61,7 @@ def upload_to_drive(service, local_path, folder_id, dry_run=False):
         try:
             service.files().create(body=file_metadata, media_body=media, fields='id').execute()
             print(f"Created Google Doc: {doc_title}")
-        except Exception as e:
+        except HttpError as e:
             print(f"Error uploading {doc_title}: {e}")
 
 def main():

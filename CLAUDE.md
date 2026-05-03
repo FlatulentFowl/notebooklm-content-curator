@@ -1,114 +1,56 @@
-# CLAUDE.md — Productivity Agent
+# Productivity Agent - AI Developer Context
 
-Project-level instructions for Claude Code. These override default behaviour for this repository.
+Welcome. If you are an AI Coding Assistant (Claude, Cursor, Gemini, etc.) interacting with this repository, this document contains your **core system instructions and project context**. You must adhere to these principles at all times.
 
----
+## 1. Project Context & Mission
 
-## Project Overview
+- **Domain:** NetSuite and Supply Chain Management (SCM) consulting.
+- **Goal:** Reduce cognitive load through automation for understaffed environments.
+- **Core Loops:**
+  1. *Cognitive Offloading:* Extract action items from Meet transcripts/Markdown -> Google Tasks.
+  2. *Knowledge Automation:* Fetch SCM podcasts/YouTube -> NotebookLM.
+  3. *Ecosystem Bridging:* Connect Google Workspace, local file systems, and external APIs seamlessly.
 
-A suite of Python 3.12 automation scripts that wire together Google Workspace, YouTube, and local markdown files into a daily productivity workflow. All scripts share a common credential/config layer in `agent_utils.py`.
+## 2. Architecture Directives
 
-```
-prod-agent-meet.py        Google Meet Gemini notes → Google Tasks
-prod-agent-tasks.py       Checkbox notes → subtasks (destructive: clears notes)
-prod-agent-notebooklm.py  Tagged markdown files → Google Drive / NotebookLM
-prod-agent-podcast.py     YouTube playlists → local transcript markdown files
-agent_utils.py            Shared OAuth, date range, and config utilities
-setup-auth.py             One-time OAuth consent flow (run manually)
-```
+- **Phase 1 Priority:** Build rock-solid, deterministic, modular tools.
+- **Service Layer Pattern:** Actively refactor legacy procedural scripts (`prod_agent_*.py`) into strict, isolated service classes.
+- **Separation of Concerns:** UI, routing, business logic, and data access must be completely isolated. Procedural spaghetti scripts are forbidden.
 
----
+## 3. Security Constraints (Zero Tolerance)
 
-## Key Conventions
+- **No Hardcoded Secrets:** NEVER hardcode credentials, API keys, or tokens.
+- **OAuth:** Enforce least-privilege OAuth handling. Always reference `.env.example` and `settings.json.example` for environment structures.
+- **Validation:** ALWAYS sanitize and validate external inputs (Markdown, transcripts, API payloads).
+- **Resilience:** Implement exponential backoff for APIs. Do not allow silent failures; log errors explicitly.
 
-### Dry-run first
+## 4. Technical Environment
 
-Every script that writes or deletes data has a `--dry-run` flag. Always suggest running with `--dry-run` before suggesting a real run. `prod-agent-tasks.py` is the most destructive — it permanently clears task notes after promoting checkboxes.
+- **Stack:** Python >=3.12, uv package manager (refer to `pyproject.toml`, `uv.lock`).
+- **Commands:**
+  - Setup Auth: `uv run src/setup_auth.py`
+  - Run App: `uv run src/prod_agent.py`
+  - Run Sec-Scan: `uv run scripts/security-scan.py` *(Mandatory before finalizing any feature)*
 
-### Config lives in `settings.json`
+## 5. Scoping Rules
 
-User config (name, ignored meetings, podcast playlists) is in `settings.json` in the project root. It is gitignored. Access it only via `agent_utils.load_config()` — never read it directly in scripts. Never suggest adding it to git.
+- **Ignore `backburner/`:** Never include scripts or files under `backburner/` in reviews, runs, refactors, or comparisons. That directory is out of scope.
 
-### Credentials are never in the repo
+## 6. Workflow & Orchestration Protocol
 
-The following are gitignored and must stay that way:
+Maintain overarching context using these state files. If a file doesn't exist yet, create it before starting work:
 
-- `settings.json` — personal config
-- `credentials.json` — OAuth client secrets (downloaded from Google Cloud Console)
-- `google-*-token.json` — per-script OAuth tokens (stored in `GOOGLE_CONFIG_DIR`)
-- `.env` — environment variables
+1. `STATUS.md` **(The Save Game):** Check before starting work. Mark items complete immediately upon finishing.
+2. `ARCHITECTURE.md` **(The Map):** Align all structural changes or new libraries with this document.
+3. `DECISIONS.md` **(The Memory):** Record significant architectural and security decisions here.
 
-### Path convention for src/ scripts
+## 7. Sub-Agent Personas
 
-`agent_utils.py` derives the project root as the parent of `src/` so that `.env` and `settings.json` are always resolved relative to the repository root, not `src/`. Scripts in `src/` that import `agent_utils` inherit this automatically. `setup-auth.py` does not import `agent_utils`, so it resolves the project root directly.
+For complex requests, break down the user's intent and adopt the appropriate persona from `AGENTS.md`:
 
-### Date handling
-
-All date logic uses SAST (UTC+2). The default mode for `prod-agent-meet.py` is "previous weekday" — Friday on Mondays. Override with `--date DD/MM/YYYY` or `--date today`.
-
-### No new scripts without `--dry-run`
-
-Any new script in `src/` that writes or deletes data must have a `--dry-run` flag before being considered complete.
-
-### Token files
-
-Each script uses its own token file (`google-meet-token.json`, etc.) stored in `GOOGLE_CONFIG_DIR` (default: `~/.config/productivity-agent`). Do not change this pattern.
-
----
-
-## Security Rules
-
-- **Never commit** `settings.json`, `config.json`, `credentials.json`, `.env`, or any `*.token.json`.
-- **Never hardcode** API keys, email addresses, OAuth client IDs/secrets, or personal names in source files.
-- **Never suggest** `git add -A` or `git add .` — always stage files explicitly by name.
-- If you find a credential or personal value hardcoded in a file, flag it immediately before doing anything else.
-- If a file is being added to git and it looks like it may contain personal data, warn the user before proceeding.
-- Run `python3 scripts/security-scan.py` before any commit that changes config loading, credential handling, or `.gitignore`.
-
----
-
-## Agent Planning Workflow
-
-### Use the advisor before committing to an approach
-
-Call `advisor()` before any substantive work — before writing code, before interpreting an ambiguous requirement, before choosing between two approaches. The advisor is a stronger reviewer that sees your full conversation history and can catch blind spots before they become hard-to-reverse mistakes.
-
-**Always call advisor:**
-
-- Before the first significant edit in a session
-- When stuck or getting recurring errors
-- When considering a change of approach
-- When the task is complete (call it, then report to the user)
-
-### Plan mode for multi-file changes
-
-For any change that touches more than two files or has non-obvious ordering dependencies, use `/plan` to write an implementation plan before executing. The plan should include a verification section. Execute only after the user approves the plan.
-
-### Available agents (see AGENTS.md for detail)
-
-| Agent | When to use |
-|---|---|
-| `advisor()` | Before/after substantive work; when stuck |
-| `Explore` subagent | Codebase exploration across multiple files |
-| Security scan | Before going public; after any config/credential change |
-
----
-
-## Testing & Verification
-
-There is no automated test suite. Verify changes by:
-
-1. **Syntax check:** `python3 -m py_compile <file>.py`
-2. **Import check:** `python3 -c "import <module>"`
-3. **Dry-run:** `python3 prod-agent-<name>.py --dry-run`
-4. **Config check:** `python3 -c "from agent_utils import load_config; print(load_config())"`
-
-Do not claim a change is complete without running at least the syntax check.
-
----
-
-## Dependencies
-
-Runtime: Python 3.12, managed via `requirements.txt`.  
-Install: `pip3 install -r requirements.txt`  
-No virtual environment is required — packages are installed to system Python 3.12.
+| Intent / Trigger | Persona | Suggested Model |
+| :--- | :--- | :--- |
+| Code cleanup, modularization, Service Layer | Refactoring Specialist | `claude-sonnet-4-6` |
+| Code review, auth validation, threat modeling | Security & Infrastructure Auditor | `claude-opus-4-7` |
+| Phase 2 LLM orchestration design | Agentic Orchestration Engineer | `claude-opus-4-7` |
+| Unit tests, validation scripts, QA | QA & Testing Engineer | `claude-haiku-4-5` |
