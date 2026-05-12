@@ -4,52 +4,52 @@ A suite of scripts that connect your Google Workspace activity to Google Tasks, 
 
 | Script | What it does |
 | :---- | :---- |
-| prod-agent.py | Main wrapper to run individual agents or execute them all in sequence |
-| prod-agent-meet.py | Extracts assigned Next Steps from Google Meet Gemini notes and creates Google Tasks |
-| prod-agent-tasks.py | Converts \[ \] checkbox items in task notes into subtasks |
-| prod-agent-notebooklm.py | Uploads tagged markdown files to a Google Drive folder for NotebookLM |
-| prod-agent-podcast.py | Fetches transcripts from YouTube playlists or videos and saves them as markdown |
+| src/prod_agent.py | Main wrapper to run individual agents or execute them all in sequence |
+| src/tools/tool_meet.py | Extracts assigned Next Steps from Google Meet Gemini notes and creates Google Tasks |
+| src/tools/tool_tasks.py | Converts [ ] checkbox items in task notes into subtasks |
+| src/tools/tool_notebooklm.py | Uploads tagged markdown files to a Google Drive folder for NotebookLM |
+| src/tools/tool_podcast.py | Fetches transcripts from YouTube playlists or videos and saves them as markdown |
 
 ## **Setup**
 
-### **1\. Install dependencies**
+### **1. Install dependencies**
 
 This project uses [uv](https://docs.astral.sh/uv/). Install dependencies with:
 
 `uv sync`
 
-### **2\. Configure environment**
+### **2. Configure environment**
 
 Copy .env.example to .env and fill in your values:
 
 ```
-GOOGLE\_CONFIG\_DIR=\~/.config/productivity-agent  
-GOOGLE\_CREDENTIALS\_FILE=credentials.json  
-NOTEBOOKLM\_DRIVE\_FOLDER\_ID=\<your-drive-folder-id\>  
-NOTEBOOKLM\_SOURCE\_DIRS=\~/path/to/notes:\~/other/notes
+GOOGLE_CONFIG_DIR=~/.config/productivity-agent
+GOOGLE_CREDENTIALS_FILE=credentials.json
+NOTEBOOKLM_DRIVE_FOLDER_ID=<your-drive-folder-id>
+NOTEBOOKLM_SOURCE_DIRS=~/path/to/notes:~/other/notes
 ```
 
 | Variable | Description |
 | :---- | :---- |
-| GOOGLE\_CONFIG\_DIR | Directory where OAuth token files are stored |
-| GOOGLE\_CREDENTIALS\_FILE | Local filename for the OAuth client credentials |
-| NOTEBOOKLM\_DRIVE\_FOLDER\_ID | Google Drive folder ID to upload files into |
-| NOTEBOOKLM\_SOURCE\_DIRS | Colon-separated list of local directories to scan for tagged files |
-| PODCAST\_OUTPUT\_DIR | Local directory where podcast transcript markdown files are saved |
+| GOOGLE_CONFIG_DIR | Directory where OAuth token files are stored |
+| GOOGLE_CREDENTIALS_FILE | Local filename for the OAuth client credentials |
+| NOTEBOOKLM_DRIVE_FOLDER_ID | Google Drive folder ID to upload files into |
+| NOTEBOOKLM_SOURCE_DIRS | Colon-separated list of local directories to scan for tagged files |
+| PODCAST_OUTPUT_DIR | Local directory where podcast transcript markdown files are saved |
 
-### **3\. Set up Google OAuth (one-time)**
+### **3. Set up Google OAuth (one-time)**
 
-1. Go to [console.cloud.google.com](https://console.cloud.google.com) and sign in  
-2. Create a project (any name)  
-3. Enable the APIs you need (see per-script requirements below)  
-4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**  
-5. Choose **Desktop app**, click Create, then **Download JSON**  
-6. Save the downloaded file to `$GOOGLE\_CONFIG\_DIR/credentials.json`
+1. Go to [console.cloud.google.com](https://console.cloud.google.com) and sign in
+2. Create a project (any name)
+3. Enable the APIs you need (see per-script requirements below)
+4. Go to **APIs & Services → Credentials → Create Credentials → OAuth client ID**
+5. Choose **Desktop app**, click Create, then **Download JSON**
+6. Save the downloaded file to `$GOOGLE_CONFIG_DIR/credentials.json`
 7. Run setup_auth.py to complete the OAuth flow and generate a local credentials.json:
 
-`python3 src/setup-auth.py`
+`uv run src/setup_auth.py`
 
-The first time you run each script, a browser window opens asking you to grant access. Tokens are cached in `$GOOGLE\_CONFIG\_DIR` and won't prompt you again until they expire.
+The first time you run each script, a browser window opens asking you to grant access. Tokens are cached in `$GOOGLE_CONFIG_DIR` and won't prompt you again until they expire.
 
 **Security:** Token files and credentials.json are excluded via .gitignore and should never be committed. .env is also excluded.
 
@@ -57,17 +57,17 @@ The first time you run each script, a browser window opens asking you to grant a
 
 Create a settings.json file in the project directory to configure script behavior:
 
-```JSON
-{  
-  "primary\_user": \["Your Name"\],  
-  "ignored\_meetings": \["All Hands Meeting"\]  
+```json
+{
+  "primary_user": ["Your Name"],
+  "ignored_meetings": ["All Hands Meeting"]
 }
 ```
 
 | Key | Used by | Description |
 | :---- | :---- | :---- |
-| primary\_user | prod-agent-meet.py | Names to match when extracting assigned action items from Next Steps |
-| ignored\_meetings | prod-agent-meet.py | Calendar event titles or event IDs to skip |
+| primary_user | tool_meet.py | Names to match when extracting assigned action items from Next Steps |
+| ignored_meetings | tool_meet.py | Calendar event titles or event IDs to skip |
 
 ## **Scripts**
 
@@ -77,60 +77,66 @@ You can run scripts individually or use the main wrapper.
 
 Run all agents sequentially or trigger them one by one.
 
-\# Run all agents (meet → tasks → notebooklm → podcast)  
-`python3 src/prod-agent.py all`
+```
+# Run all agents (meet → tasks → notebooklm → podcast)
+uv run src/prod_agent.py all
 
-\# Dry run (skips podcast)  
-python3 src/prod-agent.py all \--dry-run
+# Dry run (skips podcast)
+uv run src/prod_agent.py all --dry-run
+```
 
-### **prod-agent-meet.py — Meet → Tasks**
+### **tool_meet.py — Meet → Tasks**
 
-Fetches calendar events from the previous weekday and reads attached Google Docs for Gemini notes. It grabs bullet points assigned to `primary\_user` under "Next Steps" and creates a Google Task.
+Fetches calendar events from the previous weekday and reads attached Google Docs for Gemini notes. It grabs bullet points assigned to `primary_user` under "Next Steps" and creates a Google Task.
 
 **APIs required:** Google Calendar API, Google Drive API, Google Docs API, Google Tasks API
 
-**Token:** `$GOOGLE\_CONFIG\_DIR/google-meet-token.json`
+**Token:** `$GOOGLE_CONFIG_DIR/google-meet-token.json`
 
-`python3 src/prod-agent.py meet`
+```
+uv run src/prod_agent.py meet
 
-\# Process a specific date  
-`python3 src/prod-agent.py meet \--date 21/04/2025`
+# Process a specific date
+uv run src/prod_agent.py meet --date 21/04/2025
 
-\# Process today  
-`python3 src/prod-agent.py meet \--date today`
+# Process today
+uv run src/prod_agent.py meet --date today
+```
 
-### **prod-agent-tasks.py — Checkbox Notes → Subtasks**
+### **tool_tasks.py — Checkbox Notes → Subtasks**
 
-Scans open Google Tasks for notes containing \[ \] checkboxes. It turns each checkbox into a subtask, then clears the notes field.
+Scans open Google Tasks for notes containing [ ] checkboxes. It turns each checkbox into a subtask, then clears the notes field.
 
 **APIs required:** Google Tasks API
 
-**Token:** `$GOOGLE\_CONFIG\_DIR/google-tasks-token.json`
+**Token:** `$GOOGLE_CONFIG_DIR/google-tasks-token.json`
 
-`python3 src/prod-agent.py tasks`
+`uv run src/prod_agent.py tasks`
 
-### **prod-agent-notebooklm.py — NotebookLM Sync**
+### **tool_notebooklm.py — NotebookLM Sync**
 
-Scans the directories listed in NOTEBOOKLM\_SOURCE\_DIRS for markdown files tagged with notebooklm-source. It uploads them to your target Drive folder as Google Docs, skipping files that already exist.
+Scans the directories listed in NOTEBOOKLM_SOURCE_DIRS for markdown files tagged with `notebooklm-source`. It uploads them to your target Drive folder as Google Docs, skipping files that already exist.
 
 **APIs required:** Google Drive API
 
-**Token:** `$GOOGLE\_CONFIG\_DIR/google-notebooklm-token.json`
+**Token:** `$GOOGLE_CONFIG_DIR/google-notebooklm-token.json`
 
-`python3 src/prod-agent.py notebooklm`
+`uv run src/prod_agent.py notebooklm`
 
 Tag any .md file for syncing by adding a YAML frontmatter block:
 
-\---  
-tags:  
-  \- notebooklm-source  
-\---
+```yaml
+---
+tags:
+  - notebooklm-source
+---
+```
 
-### **prod-agent-podcast.py — YouTube → Transcripts**
+### **tool_podcast.py — YouTube → Transcripts**
 
 Downloads auto-generated transcripts from a YouTube video or playlist and saves them locally as markdown files.
 
-`python3 src/prod-agent.py podcast \--playlist \<URL\> \--out \~/path/to/save`
+`uv run src/prod_agent.py podcast --playlist <URL> --out ~/path/to/save`
 
 ## **Changelog**
 
@@ -142,20 +148,20 @@ Downloads auto-generated transcripts from a YouTube video or playlist and saves 
 
 ### **v0.1.5**
 
-* Moved authentication paths and user-specific config to .env  
-* Removed legacy chat and mail agents  
-* prod-agent-meet.py now creates Google Tasks directly from Next Steps  
-* Added prod-agent-tasks.py — converts task note checkboxes to subtasks  
-* Added prod-agent-podcast.py for YouTube transcript harvesting  
-* Switched configuration file from config.json to settings.json  
+* Moved authentication paths and user-specific config to .env
+* Removed legacy chat and mail agents
+* tool_meet.py now creates Google Tasks directly from Next Steps
+* Added tool_tasks.py — converts task note checkboxes to subtasks
+* Added tool_podcast.py for YouTube transcript harvesting
+* Switched configuration file from config.json to settings.json
 * Added main prod_agent.py wrapper script
 
 ### **v0.1.4**
 
-* On Mondays, scripts now process data from the previous Friday  
-* Standardized date range logic in agent\_utils.py
+* On Mondays, scripts now process data from the previous Friday
+* Standardized date range logic in agent_utils.py
 
 ### **v0.1.3**
 
-* Added prod-agent-meet.py support for Gemini notes  
+* Added tool_meet.py support for Gemini notes
 * Added configuration support for filtering ignored meetings
