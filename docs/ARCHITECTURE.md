@@ -14,7 +14,7 @@ To ensure testability, modularity, and a clean transition to an LLM Agent Swarm,
 
 ## **Phase 1 Target State (Modular Monolith)**
 
-In Phase 1, we are refactoring the existing prod_agent_\*.py scripts into the following domain-driven services:
+In Phase 1, we are refactoring the existing prod-agent-\*.py scripts into the following domain-driven services:
 
 ### **1\. Core & Infrastructure Services**
 
@@ -23,15 +23,15 @@ In Phase 1, we are refactoring the existing prod_agent_\*.py scripts into the fo
 
 ### **2\. Domain Services**
 
-* src/services/workspace\_service.py (Replaces prod_agent_meet.py logic)  
+* src/services/workspace\_service.py (Replaces prod-agent-meet.py logic)  
   * *Responsibilities:* Interfacing with Google Drive to fetch Meet transcripts and Docs.  
-* src/services/task\_service.py (Replaces prod_agent_tasks.py logic)  
+* src/services/task\_service.py (Replaces prod-agent-tasks.py logic)  
   * *Responsibilities:* Standardizing "Action Items" and syncing them to Google Tasks.  
 * src/services/calendar\_service.py  
   * *Responsibilities:* Reading Google Calendar to determine daily context.  
-* src/services/ingestion\_service.py (Replaces prod_agent_podcast.py logic)  
+* src/services/ingestion\_service.py (Replaces prod-agent-podcast.py logic)  
   * *Responsibilities:* Fetching and standardizing transcripts/audio from YouTube and podcasts.  
-* src/services/knowledge\_service.py (Replaces prod_agent_notebooklm.py logic)  
+* src/services/knowledge\_service.py (Replaces prod-agent-notebooklm.py logic)  
   * *Responsibilities:* Pushing formatted SCM/NetSuite trends into NotebookLM.
 
 ### **3\. Utility Services**
@@ -58,6 +58,7 @@ productivity-agent/
 ├── src/  
 │   ├── agent/              \# Phase 2: LLM orchestration and tools  
 │   ├── services/           \# Phase 1: Modular business logic  
+│   ├── tools/              \# Current CLI entry points (tool_meet.py, tool_tasks.py, tool_notebooklm.py, tool_podcast.py)  
 │   ├── utils/              \# Pure functions (parsers, formatters)  
 │   ├── prod_agent.py       \# Phase 1 Controller  
 │   └── setup_auth.py       \# Auth initialization  

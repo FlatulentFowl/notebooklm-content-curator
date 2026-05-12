@@ -28,17 +28,17 @@ def _meet(args):
         extra += ['--date', args.date]
     if getattr(args, 'dry_run', False):
         extra.append('--dry-run')
-    return _run('prod_agent_meet.py', extra)
+    return _run('tools/tool_meet.py', extra)
 
 
 def _tasks(args):
     extra = ['--dry-run'] if getattr(args, 'dry_run', False) else []
-    return _run('prod_agent_tasks.py', extra)
+    return _run('tools/tool_tasks.py', extra)
 
 
 def _notebooklm(args):
     extra = ['--dry-run'] if getattr(args, 'dry_run', False) else []
-    return _run('prod_agent_notebooklm.py', extra)
+    return _run('tools/tool_notebooklm.py', extra)
 
 
 def _podcast(args):
@@ -52,9 +52,9 @@ def _podcast(args):
         extra += ['--name', name]
     if getattr(args, 'out', None):
         extra += ['--out', args.out]
-    return _run('prod_agent_podcast.py', extra)
+    return _run('tools/tool_podcast.py', extra)
 
-
+# pylint: disable=E0001
 def _all(args):
     dry_run = getattr(args, 'dry_run', False)
     codes = []
@@ -78,6 +78,7 @@ def _all(args):
 
 
 def main():
+    """Entry point."""
     parser = argparse.ArgumentParser(
         prog='prod-agent',
         description='Productivity agent — run one or all agents.',
