@@ -54,7 +54,7 @@ def _podcast(args):
         extra += ['--out', args.out]
     return _run('tools/tool_podcast.py', extra)
 
-
+# pylint: disable=E0001
 def _all(args):
     dry_run = getattr(args, 'dry_run', False)
     codes = []
@@ -78,6 +78,7 @@ def _all(args):
 
 
 def main():
+    """Entry point."""
     parser = argparse.ArgumentParser(
         prog='prod-agent',
         description='Productivity agent — run one or all agents.',
