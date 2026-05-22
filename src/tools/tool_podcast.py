@@ -1,12 +1,17 @@
 import argparse
+import http.cookiejar
 import itertools
 import os
 import re
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 
-import yt_dlp
+import requests
+
+from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 from youtube_transcript_api import YouTubeTranscriptApi, CouldNotRetrieveTranscript
 
 from agent_utils import load_config
@@ -39,6 +44,100 @@ class Spinner:
         sys.stdout.flush()
 
 
+class YouTubeService:
+    """Wraps YouTube Data API v3 for playlist/video metadata."""
+
+    def __init__(self, api_key: str):
+        self._svc = build('youtube', 'v3', developerKey=api_key)
+
+    def get_latest_playlist_videos(self, playlist_id: str, count: int = 3) -> list[dict]:
+        """Fetch up to 50 items, return the `count` most recently published."""
+        try:
+            resp = self._svc.playlistItems().list(
+                part='snippet,contentDetails',
+                playlistId=playlist_id,
+                maxResults=50,
+            ).execute()
+        except HttpError as e:
+            raise RuntimeError(f'YouTube API error fetching playlist {playlist_id}: {e.status_code} {e.reason}') from e
+
+        items = resp.get('items', [])
+        if not items:
+            raise RuntimeError(f'No videos found in playlist: {playlist_id}')
+
+        def _date(item):
+            return (
+                item.get('contentDetails', {}).get('videoPublishedAt')
+                or item.get('snippet', {}).get('publishedAt', '')
+            )
+
+        sorted_items = sorted(items, key=_date, reverse=True)[:count]
+        return [
+            {
+                'id': item['snippet']['resourceId']['videoId'],
+                'title': item['snippet']['title'],
+                'published_at': _date(item),
+            }
+            for item in sorted_items
+        ]
+
+    def get_video_info(self, video_id: str) -> dict:
+        """Return title and published_at for a single video."""
+        try:
+            resp = self._svc.videos().list(
+                part='snippet',
+                id=video_id,
+            ).execute()
+        except HttpError as e:
+            raise RuntimeError(f'YouTube API error fetching video {video_id}: {e.status_code} {e.reason}') from e
+
+        items = resp.get('items', [])
+        if not items:
+            raise RuntimeError(f'Video not found: {video_id}')
+        snippet = items[0]['snippet']
+        return {
+            'id': video_id,
+            'title': snippet['title'],
+            'published_at': snippet['publishedAt'],
+        }
+
+
+def _get_api_key() -> str:
+    key = os.getenv('YOUTUBE_API_KEY', '')
+    if not key:
+        raise RuntimeError('YOUTUBE_API_KEY is not set. Add it to your .env file.')
+    return key
+
+
+def _get_fetch_count() -> int:
+    return int(os.getenv('PODCAST_FETCH_COUNT', '3'))
+
+
+def _playlist_id(url_or_id: str) -> str:
+    """Extract playlist ID from a full URL or return as-is if already an ID."""
+    m = re.search(r'[?&]list=([^&]+)', url_or_id)
+    return m.group(1) if m else url_or_id
+
+
+def _video_id(url_or_id: str) -> str:
+    """Extract video ID from a watch URL or return as-is if already an ID."""
+    m = re.search(r'(?:v=|youtu\.be/)([^&?/]+)', url_or_id)
+    if not m:
+        raise ValueError(f'Could not extract video ID from: {url_or_id}')
+    return m.group(1)
+
+
+def _format_date(published_at: str) -> str:
+    """Convert ISO 8601 timestamp to YYYY-MM-DD."""
+    if not published_at:
+        return ''
+    try:
+        dt = datetime.fromisoformat(published_at.replace('Z', '+00:00'))
+        return dt.astimezone(timezone.utc).strftime('%Y-%m-%d')
+    except ValueError:
+        return published_at[:10]
+
+
 def _get_out_dir():
     return os.path.expanduser(os.getenv('PODCAST_OUTPUT_DIR', _FALLBACK_OUT_DIR))
 
@@ -47,18 +146,24 @@ def load_playlists():
     return load_config().get('podcast_playlists', [])
 
 
-def get_most_recent_video(playlist_url):
-    ydl_opts = {'quiet': True, 'extract_flat': True, 'playlistend': 1}
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(playlist_url, download=False)
-    entries = info.get('entries', [])
-    if not entries:
-        raise RuntimeError('No videos found in playlist.')
-    return entries[0]
+def _build_http_client() -> requests.Session | None:
+    path = os.getenv('YOUTUBE_COOKIES_FILE', '')
+    if not path:
+        return None
+    expanded = os.path.expanduser(path)
+    if not os.path.exists(expanded):
+        print(f'Warning: YOUTUBE_COOKIES_FILE not found at {expanded}, proceeding without cookies.', flush=True)
+        return None
+    jar = http.cookiejar.MozillaCookieJar(expanded)
+    jar.load(ignore_discard=True, ignore_expires=True)
+    session = requests.Session()
+    session.cookies = jar
+    return session
 
 
 def get_transcript(video_id):
-    api = YouTubeTranscriptApi()
+    client = _build_http_client()
+    api = YouTubeTranscriptApi(http_client=client) if client else YouTubeTranscriptApi()
     try:
         return api.fetch(video_id)
     except CouldNotRetrieveTranscript:
@@ -80,57 +185,63 @@ def safe_filename(title):
     return re.sub(r'\s+', ' ', name)
 
 
-def process_playlist(playlist_name, playlist_url, out_dir):
-    print(f'\n[{playlist_name}] Starting...', flush=True)
-
+def _fetch_playlist_videos(playlist_name: str, playlist_url: str, count: int) -> list[dict]:
+    """Fetch up to `count` most-recent video entries from a playlist."""
+    svc = YouTubeService(_get_api_key())
     with Spinner(f'[{playlist_name}] Fetching playlist info...'):
-        video = get_most_recent_video(playlist_url)
+        videos = svc.get_latest_playlist_videos(_playlist_id(playlist_url), count=count)
+    print(f'[{playlist_name}] Found {len(videos)} video(s).', flush=True)
+    return videos
 
+
+def _process_video_entry(playlist_name: str, video: dict, out_dir: str, add_delay: bool = False) -> None:
+    """Fetch and save transcript for a single video entry."""
     video_id = video['id']
-    title = video.get('title', video_id)
-    upload_date = video.get('upload_date', '')
-
-    print(f'[{playlist_name}] Most recent: {title}', flush=True)
-    print(f'[{playlist_name}] Video ID:    {video_id}', flush=True)
-
-    os.makedirs(out_dir, exist_ok=True)
+    title = video['title']
+    date_str = _format_date(video['published_at'])
     filename = os.path.join(out_dir, f'{safe_filename(title)}.md')
 
+    print(f'[{playlist_name}] {title}', flush=True)
+
     if os.path.exists(filename):
-        print(f'[{playlist_name}] Skipped (already exists): {filename}', flush=True)
+        print(f'[{playlist_name}]   Skipped (already exists)', flush=True)
         return
 
-    with Spinner(f'[{playlist_name}] Fetching transcript...'):
-        transcript = get_transcript(video_id)
-    body = format_transcript(transcript)
+    if add_delay:
+        time.sleep(3)
+
+    try:
+        with Spinner(f'[{playlist_name}]   Fetching transcript...'):
+            transcript = get_transcript(video_id)
+        body = format_transcript(transcript)
+    except Exception as e:  # pylint: disable=broad-except
+        print(f'[{playlist_name}]   Transcript error: {e}', flush=True)
+        return
 
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(f'# {title}\n\n')
-        if upload_date:
-            f.write(f'**Date:** {upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}\n\n')
+        if date_str:
+            f.write(f'**Date:** {date_str}\n\n')
         f.write(f'**Source:** https://www.youtube.com/watch?v={video_id}\n\n')
         f.write('---\n\n')
         f.write(body)
         f.write('\n')
 
-    print(f'[{playlist_name}] Saved to {filename}', flush=True)
+    print(f'[{playlist_name}]   Saved to {filename}', flush=True)
 
 
 def process_video(video_url, name, out_dir):
-    video_id = re.search(r'(?:v=|youtu\.be/)([^&?/]+)', video_url)
-    if not video_id:
-        raise ValueError(f'Could not extract video ID from URL: {video_url}')
-    video_id = video_id.group(1)
+    vid_id = _video_id(video_url)
+    svc = YouTubeService(_get_api_key())
 
     with Spinner(f'[{name}] Fetching video info...'):
-        ydl_opts = {'quiet': True}
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(video_url, download=False)
-    title = info.get('title', video_id)
-    upload_date = info.get('upload_date', '')
+        video = svc.get_video_info(vid_id)
+
+    title = video['title']
+    date_str = _format_date(video['published_at'])
 
     print(f'[{name}] Title: {title}', flush=True)
-    print(f'[{name}] Video ID: {video_id}', flush=True)
+    print(f'[{name}] Video ID: {vid_id}', flush=True)
 
     os.makedirs(out_dir, exist_ok=True)
     filename = os.path.join(out_dir, f'{safe_filename(title)}.md')
@@ -140,14 +251,14 @@ def process_video(video_url, name, out_dir):
         return
 
     with Spinner(f'[{name}] Fetching transcript...'):
-        transcript = get_transcript(video_id)
+        transcript = get_transcript(vid_id)
     body = format_transcript(transcript)
 
     with open(filename, 'w', encoding='utf-8') as f:
         f.write(f'# {title}\n\n')
-        if upload_date:
-            f.write(f'**Date:** {upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:]}\n\n')
-        f.write(f'**Source:** https://www.youtube.com/watch?v={video_id}\n\n')
+        if date_str:
+            f.write(f'**Date:** {date_str}\n\n')
+        f.write(f'**Source:** https://www.youtube.com/watch?v={vid_id}\n\n')
         f.write('---\n\n')
         f.write(body)
         f.write('\n')
@@ -156,9 +267,9 @@ def process_video(video_url, name, out_dir):
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fetch the most recent podcast transcript from YouTube playlists.')
-    parser.add_argument('--playlist', help='Single playlist URL to process (overrides settings.json)')
-    parser.add_argument('--video', help='Single video URL to fetch transcript for')
+    parser = argparse.ArgumentParser(description='Fetch recent podcast transcripts from YouTube playlists.')
+    parser.add_argument('--playlist', help='Single playlist URL or ID to process (overrides settings.json)')
+    parser.add_argument('--video', help='Single video URL or ID to fetch transcript for')
     parser.add_argument('--name', default='Podcast', help='Name for the playlist/video when using --playlist or --video')
     parser.add_argument('--out', default=_get_out_dir(), help='Output directory (default: ~/scm-coe/raw/transcripts/podcast)')
     args = parser.parse_args()
@@ -168,7 +279,11 @@ def main():
         return
 
     if args.playlist:
-        process_playlist(args.name, args.playlist, args.out)
+        fetch_count = _get_fetch_count()
+        videos = _fetch_playlist_videos(args.name, args.playlist, fetch_count)
+        os.makedirs(args.out, exist_ok=True)
+        for i, video in enumerate(videos):
+            _process_video_entry(args.name, video, args.out, add_delay=(i > 0))
         return
 
     playlists = load_playlists()
@@ -176,12 +291,30 @@ def main():
         print('No playlists found in settings.json. Use --playlist to specify one.', flush=True)
         return
 
-    print(f'Processing {len(playlists)} playlist(s)...', flush=True)
+    fetch_count = _get_fetch_count()
+    print(f'Processing {len(playlists)} playlist(s), {fetch_count} episode(s) each...', flush=True)
+
+    # Phase 1: fetch video lists for all playlists up front
+    playlist_videos = []
     for entry in playlists:
         try:
-            process_playlist(entry['name'], entry['url'], args.out)
+            videos = _fetch_playlist_videos(entry['name'], entry['url'], fetch_count)
+            playlist_videos.append((entry['name'], videos))
         except Exception as e:  # pylint: disable=broad-except
-            print(f'[{entry["name"]}] Error: {e}', flush=True)
+            print(f'[{entry["name"]}] Error fetching playlist: {e}', flush=True)
+
+    # Phase 2: round-robin by episode position (newest first across all playlists, then second newest, etc.)
+    os.makedirs(args.out, exist_ok=True)
+    first_transcript = True
+    for i in range(fetch_count):
+        for name, videos in playlist_videos:
+            if i >= len(videos):
+                continue
+            try:
+                _process_video_entry(name, videos[i], args.out, add_delay=not first_transcript)
+                first_transcript = False
+            except Exception as e:  # pylint: disable=broad-except
+                print(f'[{name}] Error processing episode {i + 1}: {e}', flush=True)
 
     print('\nAll done.', flush=True)
 
