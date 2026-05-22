@@ -140,6 +140,10 @@ Downloads auto-generated transcripts from a YouTube video or playlist and saves 
 
 ## **Changelog**
 
+### **v0.2.0**
+
+* Replaced `yt-dlp` with YouTube Data API in `tool_podcast.py` for cookie authentication support and improved metadata handling
+
 ### **v0.1.7**
 
 * Renamed individual agent scripts to `tool_*.py` naming convention
