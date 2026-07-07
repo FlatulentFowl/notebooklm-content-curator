@@ -181,6 +181,17 @@ def _format_label(duration_seconds: int | None) -> str:
     return 'episode'
 
 
+def _format_duration_clock(duration_seconds: int | None) -> str:
+    """Render a duration in seconds as m:ss or h:mm:ss."""
+    if duration_seconds is None:
+        return ''
+    hours, rem = divmod(duration_seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        return f'{hours}:{minutes:02d}:{seconds:02d}'
+    return f'{minutes}:{seconds:02d}'
+
+
 def _yaml_quote(value: str) -> str:
     """Wrap a string in double quotes for a YAML frontmatter value, escaping embedded quotes."""
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
@@ -194,6 +205,7 @@ def _build_frontmatter(date_str: str, source_url: str, podcast_name: str, durati
         f'podcast: {_yaml_quote(podcast_name)}',
         'description: ""',
         f'format: {_yaml_quote(_format_label(duration_seconds))}',
+        f'duration: {_yaml_quote(_format_duration_clock(duration_seconds))}',
         '---',
         '',
     ]
