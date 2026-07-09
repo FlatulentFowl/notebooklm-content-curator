@@ -81,7 +81,7 @@ Run all agents sequentially or trigger them one by one.
 # Run all agents (meet → tasks → notebooklm → podcast)
 uv run src/prod_agent.py all
 
-# Dry run (skips podcast)
+# Dry run all agents (nothing is written or created)
 uv run src/prod_agent.py all --dry-run
 ```
 
@@ -134,9 +134,27 @@ tags:
 
 ### **tool_podcast.py — YouTube → Transcripts**
 
-Downloads auto-generated transcripts from a YouTube video or playlist and saves them locally as markdown files.
+Downloads auto-generated transcripts from a YouTube video or playlist and saves them locally as markdown files. Business logic lives in `src/services/ingestion_service.py` with pure parsing helpers in `src/utils/youtube.py`; the tool itself is a thin CLI.
 
-`uv run src/prod_agent.py podcast --playlist <URL> --out ~/path/to/save`
+```
+uv run src/prod_agent.py podcast --playlist <URL> --out ~/path/to/save
+
+# Preview without fetching transcripts or writing files
+uv run src/prod_agent.py podcast --dry-run
+```
+
+Transcript HTTP requests time out after 30s by default (override with `PODCAST_HTTP_TIMEOUT`); YouTube Data API calls retry up to 3 times with backoff.
+
+## **Development**
+
+```
+uv sync --extra dev
+uv run pytest -q                                                    # unit tests (no network)
+uv run pylint src/utils src/services src/tools/tool_podcast.py     # lint
+uv run scripts/security-scan.py                                     # mandatory before finalizing features
+```
+
+CI (GitHub Actions) runs the same three checks on every push and pull request.
 
 ## **Changelog**
 
