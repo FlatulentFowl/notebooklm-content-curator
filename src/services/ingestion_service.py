@@ -36,6 +36,7 @@ _FALLBACK_OUT_DIR = '~/scm-coe/raw/transcripts/podcast'
 
 
 def get_api_key() -> str:
+    """Return the YouTube Data API key from the environment."""
     key = os.getenv('YOUTUBE_API_KEY', '')
     if not key:
         raise RuntimeError('YOUTUBE_API_KEY is not set. Add it to your .env file.')
@@ -43,14 +44,17 @@ def get_api_key() -> str:
 
 
 def get_fetch_count() -> int:
+    """Episodes to fetch per playlist (PODCAST_FETCH_COUNT, default 3)."""
     return int(os.getenv('PODCAST_FETCH_COUNT', '3'))
 
 
 def get_out_dir() -> str:
+    """Output directory for transcript files (PODCAST_OUTPUT_DIR or fallback)."""
     return os.path.expanduser(os.getenv('PODCAST_OUTPUT_DIR', _FALLBACK_OUT_DIR))
 
 
 def load_playlists() -> list[dict]:
+    """Return the podcast_playlists entries from settings.json."""
     return load_config().get('podcast_playlists', [])
 
 
@@ -67,6 +71,7 @@ class TimeoutSession(requests.Session):
 
 
 def build_http_client() -> requests.Session:
+    """Session with a default timeout, plus YouTube cookies when configured."""
     timeout_seconds = float(os.getenv('PODCAST_HTTP_TIMEOUT', '30'))
     session = TimeoutSession(timeout_seconds)
     path = os.getenv('YOUTUBE_COOKIES_FILE', '')
@@ -74,7 +79,8 @@ def build_http_client() -> requests.Session:
         return session
     expanded = os.path.expanduser(path)
     if not os.path.exists(expanded):
-        print(f'Warning: YOUTUBE_COOKIES_FILE not found at {expanded}, proceeding without cookies.', flush=True)
+        print(f'Warning: YOUTUBE_COOKIES_FILE not found at {expanded}, '
+              'proceeding without cookies.', flush=True)
         return session
     jar = http.cookiejar.MozillaCookieJar(expanded)
     jar.load(ignore_discard=True, ignore_expires=True)
@@ -83,6 +89,7 @@ def build_http_client() -> requests.Session:
 
 
 def get_transcript(vid_id: str):
+    """Fetch a transcript, falling back to the first available language."""
     api = YouTubeTranscriptApi(http_client=build_http_client())
     try:
         return api.fetch(vid_id)
@@ -115,7 +122,8 @@ class YouTubeService:
                     pageToken=page_token,
                 ).execute(num_retries=3)
             except HttpError as e:
-                raise RuntimeError(f'YouTube API error fetching playlist {pl_id}: {e.status_code} {e.reason}') from e
+                raise RuntimeError(f'YouTube API error fetching playlist {pl_id}: '
+                                   f'{e.status_code} {e.reason}') from e
 
             items.extend(resp.get('items', []))
             page_token = resp.get('nextPageToken')
@@ -154,7 +162,8 @@ class YouTubeService:
                 id=','.join(video_ids),
             ).execute(num_retries=3)
         except HttpError as e:
-            raise RuntimeError(f'YouTube API error fetching durations: {e.status_code} {e.reason}') from e
+            raise RuntimeError(f'YouTube API error fetching durations: '
+                               f'{e.status_code} {e.reason}') from e
 
         return {
             item['id']: parse_duration_seconds(item['contentDetails']['duration'])
@@ -169,7 +178,8 @@ class YouTubeService:
                 id=vid_id,
             ).execute(num_retries=3)
         except HttpError as e:
-            raise RuntimeError(f'YouTube API error fetching video {vid_id}: {e.status_code} {e.reason}') from e
+            raise RuntimeError(f'YouTube API error fetching video {vid_id}: '
+                               f'{e.status_code} {e.reason}') from e
 
         items = resp.get('items', [])
         if not items:
@@ -196,7 +206,9 @@ class IngestionService:
         self._youtube = youtube or YouTubeService(get_api_key())
         self._progress = progress or _silent_progress
 
-    def fetch_video(self, video_url: str, name: str, out_dir: str, dry_run: bool = False) -> None:
+    def fetch_video(self, video_url: str, name: str, out_dir: str,
+                    dry_run: bool = False) -> None:
+        """Fetch and save the transcript for one explicitly requested video."""
         vid_id = video_id(video_url)
 
         with self._progress(f'[{name}] Fetching video info...'):
@@ -209,8 +221,9 @@ class IngestionService:
         # unlike batch playlist runs which log and continue.
         self._save_transcript(name, video, out_dir, dry_run=dry_run, catch_errors=False)
 
-    def fetch_playlist(self, name: str, playlist_url: str, count: int, out_dir: str,
+    def fetch_playlist(self, name: str, playlist_url: str, count: int, out_dir: str,  # pylint: disable=too-many-arguments,too-many-positional-arguments
                        dry_run: bool = False) -> None:
+        """Fetch and save the newest `count` episodes of a single playlist."""
         videos = self._fetch_playlist_videos(name, playlist_url, count)
         for i, video in enumerate(videos):
             self._process_video_entry(name, video, out_dir, add_delay=(i > 0), dry_run=dry_run)
@@ -248,17 +261,18 @@ class IngestionService:
 
     def _fetch_playlist_videos(self, name: str, playlist_url: str, count: int) -> list[dict]:
         with self._progress(f'[{name}] Fetching playlist info...'):
-            videos = self._youtube.get_latest_playlist_videos(playlist_id(playlist_url), count=count)
+            videos = self._youtube.get_latest_playlist_videos(playlist_id(playlist_url),
+                                                              count=count)
         print(f'[{name}] Found {len(videos)} video(s).', flush=True)
         return videos
 
-    def _process_video_entry(self, name: str, video: dict, out_dir: str,
+    def _process_video_entry(self, name: str, video: dict, out_dir: str,  # pylint: disable=too-many-arguments,too-many-positional-arguments
                              add_delay: bool = False, dry_run: bool = False) -> None:
         print(f'[{name}] {video["title"]}', flush=True)
         self._save_transcript(name, video, out_dir, add_delay=add_delay, dry_run=dry_run,
                               indent='  ')
 
-    def _save_transcript(self, name: str, video: dict, out_dir: str,
+    def _save_transcript(self, name: str, video: dict, out_dir: str,  # pylint: disable=too-many-arguments,too-many-positional-arguments
                          add_delay: bool = False, dry_run: bool = False, indent: str = '',
                          catch_errors: bool = True) -> None:
         filename = os.path.join(out_dir, f'{safe_filename(video["title"])}.md')

@@ -19,6 +19,8 @@ from services.ingestion_service import (
 
 
 class Spinner:
+    """Terminal progress spinner shown while a fetch is in flight."""
+
     def __init__(self, message):
         self._message = message
         self._stop = threading.Event()
@@ -44,6 +46,7 @@ class Spinner:
 
 
 def run(playlist=None, video=None, name='Podcast', out=None, dry_run=False) -> int:
+    """Dispatch to the ingestion service based on which CLI options were given."""
     out = out or get_out_dir()
     service = IngestionService(progress=Spinner)
 
@@ -65,13 +68,19 @@ def run(playlist=None, video=None, name='Podcast', out=None, dry_run=False) -> i
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Fetch recent podcast transcripts from YouTube playlists.')
-    parser.add_argument('--playlist', help='Single playlist URL or ID to process (overrides settings.json)')
+    """CLI entry point."""
+    parser = argparse.ArgumentParser(
+        description='Fetch recent podcast transcripts from YouTube playlists.')
+    parser.add_argument('--playlist',
+                        help='Single playlist URL or ID to process (overrides settings.json)')
     parser.add_argument('--video', help='Single video URL or ID to fetch transcript for')
-    parser.add_argument('--name', default='Podcast', help='Name for the playlist/video when using --playlist or --video')
-    parser.add_argument('--out', default=get_out_dir(), help='Output directory (default: ~/scm-coe/raw/transcripts/podcast)')
+    parser.add_argument('--name', default='Podcast',
+                        help='Name for the playlist/video when using --playlist or --video')
+    parser.add_argument('--out', default=get_out_dir(),
+                        help='Output directory (default: ~/scm-coe/raw/transcripts/podcast)')
     parser.add_argument('--dry-run', action='store_true',
-                        help='Fetch metadata only; print what would be saved without fetching transcripts or writing files')
+                        help='Fetch metadata only; print what would be saved without '
+                             'fetching transcripts or writing files')
     args = parser.parse_args()
 
     sys.exit(run(playlist=args.playlist, video=args.video, name=args.name,

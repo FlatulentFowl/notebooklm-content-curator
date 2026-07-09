@@ -27,6 +27,7 @@ dev = [
     "black",
     "isort",
     "pylint",
+    "pytest",
 ]
 
 [tool.pylint.TYPECHECK]

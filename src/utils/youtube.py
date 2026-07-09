@@ -68,7 +68,9 @@ def yaml_quote(value: str) -> str:
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
-def build_frontmatter(date_str: str, source_url: str, podcast_name: str, duration_seconds: int | None) -> str:
+def build_frontmatter(date_str: str, source_url: str, podcast_name: str,
+                      duration_seconds: int | None) -> str:
+    """Render the YAML frontmatter block for a transcript markdown file."""
     lines = [
         '---',
         f'podcastDate: {date_str}',
@@ -94,5 +96,6 @@ def format_transcript(transcript) -> str:
 
 
 def safe_filename(title: str) -> str:
+    """Reduce a video title to a filesystem-safe filename (drops path separators etc.)."""
     name = re.sub(r'[^\w\s\-]', '', title).strip()
     return re.sub(r'\s+', ' ', name)
