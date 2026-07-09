@@ -34,7 +34,7 @@ generated-members = ["googleapiclient.*"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-packages = ["tools"]
+packages = ["tools", "services", "utils"]
 py-modules = ["agent_utils"]
 script-files = [
     "src/prod_agent.py",
