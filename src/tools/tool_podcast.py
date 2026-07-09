@@ -51,17 +51,30 @@ class YouTubeService:
         self._svc = build('youtube', 'v3', developerKey=api_key)
 
     def get_latest_playlist_videos(self, playlist_id: str, count: int = 3) -> list[dict]:
-        """Fetch up to 50 items, return the `count` most recently published."""
-        try:
-            resp = self._svc.playlistItems().list(
-                part='snippet,contentDetails',
-                playlistId=playlist_id,
-                maxResults=50,
-            ).execute()
-        except HttpError as e:
-            raise RuntimeError(f'YouTube API error fetching playlist {playlist_id}: {e.status_code} {e.reason}') from e
+        """Fetch all items (paginated) and return the `count` most recently published.
 
-        items = resp.get('items', [])
+        Playlist order from the API is insertion order, not chronological, so a
+        newly added episode can land anywhere in the list -- pagination is required
+        to find the true most-recent items, not just the first page.
+        """
+        items = []
+        page_token = None
+        while True:
+            try:
+                resp = self._svc.playlistItems().list(
+                    part='snippet,contentDetails',
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
+                ).execute()
+            except HttpError as e:
+                raise RuntimeError(f'YouTube API error fetching playlist {playlist_id}: {e.status_code} {e.reason}') from e
+
+            items.extend(resp.get('items', []))
+            page_token = resp.get('nextPageToken')
+            if not page_token:
+                break
+
         if not items:
             raise RuntimeError(f'No videos found in playlist: {playlist_id}')
 
@@ -72,20 +85,40 @@ class YouTubeService:
             )
 
         sorted_items = sorted(items, key=_date, reverse=True)[:count]
+        video_ids = [item['snippet']['resourceId']['videoId'] for item in sorted_items]
+        durations = self._get_durations(video_ids)
         return [
             {
                 'id': item['snippet']['resourceId']['videoId'],
                 'title': item['snippet']['title'],
                 'published_at': _date(item),
+                'duration_seconds': durations.get(item['snippet']['resourceId']['videoId']),
             }
             for item in sorted_items
         ]
 
-    def get_video_info(self, video_id: str) -> dict:
-        """Return title and published_at for a single video."""
+    def _get_durations(self, video_ids: list[str]) -> dict[str, int | None]:
+        """Batch-fetch durations (in seconds) for up to 50 video IDs."""
+        if not video_ids:
+            return {}
         try:
             resp = self._svc.videos().list(
-                part='snippet',
+                part='contentDetails',
+                id=','.join(video_ids),
+            ).execute()
+        except HttpError as e:
+            raise RuntimeError(f'YouTube API error fetching durations: {e.status_code} {e.reason}') from e
+
+        return {
+            item['id']: _parse_duration_seconds(item['contentDetails']['duration'])
+            for item in resp.get('items', [])
+        }
+
+    def get_video_info(self, video_id: str) -> dict:
+        """Return title, published_at, and duration for a single video."""
+        try:
+            resp = self._svc.videos().list(
+                part='snippet,contentDetails',
                 id=video_id,
             ).execute()
         except HttpError as e:
@@ -95,10 +128,12 @@ class YouTubeService:
         if not items:
             raise RuntimeError(f'Video not found: {video_id}')
         snippet = items[0]['snippet']
+        duration = items[0]['contentDetails']['duration']
         return {
             'id': video_id,
             'title': snippet['title'],
             'published_at': snippet['publishedAt'],
+            'duration_seconds': _parse_duration_seconds(duration),
         }
 
 
@@ -136,6 +171,58 @@ def _format_date(published_at: str) -> str:
         return dt.astimezone(timezone.utc).strftime('%Y-%m-%d')
     except ValueError:
         return published_at[:10]
+
+
+_DURATION_RE = re.compile(r'P(?:\d+D)?T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?')
+
+_SHORT_MAX_SECONDS = 180
+
+
+def _parse_duration_seconds(duration: str) -> int | None:
+    """Convert an ISO 8601 duration (e.g. 'PT4M13S') to whole seconds."""
+    m = _DURATION_RE.fullmatch(duration)
+    if not m:
+        return None
+    hours, minutes, seconds = (int(g) if g else 0 for g in m.groups())
+    return hours * 3600 + minutes * 60 + seconds
+
+
+def _format_label(duration_seconds: int | None) -> str:
+    """Classify a video as a Short or a full episode based on its duration."""
+    if duration_seconds is not None and duration_seconds <= _SHORT_MAX_SECONDS:
+        return 'Short clip / excerpt'
+    return 'episode'
+
+
+def _format_duration_clock(duration_seconds: int | None) -> str:
+    """Render a duration in seconds as m:ss or h:mm:ss."""
+    if duration_seconds is None:
+        return ''
+    hours, rem = divmod(duration_seconds, 3600)
+    minutes, seconds = divmod(rem, 60)
+    if hours:
+        return f'{hours}:{minutes:02d}:{seconds:02d}'
+    return f'{minutes}:{seconds:02d}'
+
+
+def _yaml_quote(value: str) -> str:
+    """Wrap a string in double quotes for a YAML frontmatter value, escaping embedded quotes."""
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
+
+def _build_frontmatter(date_str: str, source_url: str, podcast_name: str, duration_seconds: int | None) -> str:
+    lines = [
+        '---',
+        f'podcastDate: {date_str}',
+        f'source: {source_url}',
+        f'podcast: {_yaml_quote(podcast_name)}',
+        'description: ""',
+        f'format: {_yaml_quote(_format_label(duration_seconds))}',
+        f'duration: {_yaml_quote(_format_duration_clock(duration_seconds))}',
+        '---',
+        '',
+    ]
+    return '\n'.join(lines)
 
 
 def _get_out_dir():
@@ -218,12 +305,10 @@ def _process_video_entry(playlist_name: str, video: dict, out_dir: str, add_dela
         print(f'[{playlist_name}]   Transcript error: {e}', flush=True)
         return
 
+    source_url = f'https://www.youtube.com/watch?v={video_id}'
     with open(filename, 'w', encoding='utf-8') as f:
-        f.write(f'# {title}\n\n')
-        if date_str:
-            f.write(f'**Date:** {date_str}\n\n')
-        f.write(f'**Source:** https://www.youtube.com/watch?v={video_id}\n\n')
-        f.write('---\n\n')
+        f.write(_build_frontmatter(date_str, source_url, playlist_name, video.get('duration_seconds')))
+        f.write('\n')
         f.write(body)
         f.write('\n')
 
@@ -254,12 +339,10 @@ def process_video(video_url, name, out_dir):
         transcript = get_transcript(vid_id)
     body = format_transcript(transcript)
 
+    source_url = f'https://www.youtube.com/watch?v={vid_id}'
     with open(filename, 'w', encoding='utf-8') as f:
-        f.write(f'# {title}\n\n')
-        if date_str:
-            f.write(f'**Date:** {date_str}\n\n')
-        f.write(f'**Source:** https://www.youtube.com/watch?v={vid_id}\n\n')
-        f.write('---\n\n')
+        f.write(_build_frontmatter(date_str, source_url, name, video.get('duration_seconds')))
+        f.write('\n')
         f.write(body)
         f.write('\n')
 
