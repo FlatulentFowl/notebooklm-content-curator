@@ -66,7 +66,7 @@ class YouTubeService:
                     playlistId=playlist_id,
                     maxResults=50,
                     pageToken=page_token,
-                ).execute()
+                ).execute(num_retries=3)
             except HttpError as e:
                 raise RuntimeError(f'YouTube API error fetching playlist {playlist_id}: {e.status_code} {e.reason}') from e
 
@@ -105,7 +105,7 @@ class YouTubeService:
             resp = self._svc.videos().list(
                 part='contentDetails',
                 id=','.join(video_ids),
-            ).execute()
+            ).execute(num_retries=3)
         except HttpError as e:
             raise RuntimeError(f'YouTube API error fetching durations: {e.status_code} {e.reason}') from e
 
@@ -120,7 +120,7 @@ class YouTubeService:
             resp = self._svc.videos().list(
                 part='snippet,contentDetails',
                 id=video_id,
-            ).execute()
+            ).execute(num_retries=3)
         except HttpError as e:
             raise RuntimeError(f'YouTube API error fetching video {video_id}: {e.status_code} {e.reason}') from e
 
@@ -233,24 +233,36 @@ def load_playlists():
     return load_config().get('podcast_playlists', [])
 
 
-def _build_http_client() -> requests.Session | None:
+class TimeoutSession(requests.Session):
+    """requests.Session that applies a default timeout so transcript fetches cannot hang forever."""
+
+    def __init__(self, timeout_seconds: float):
+        super().__init__()
+        self._timeout_seconds = timeout_seconds
+
+    def request(self, *args, **kwargs):
+        kwargs.setdefault('timeout', self._timeout_seconds)
+        return super().request(*args, **kwargs)
+
+
+def _build_http_client() -> requests.Session:
+    timeout_seconds = float(os.getenv('PODCAST_HTTP_TIMEOUT', '30'))
+    session = TimeoutSession(timeout_seconds)
     path = os.getenv('YOUTUBE_COOKIES_FILE', '')
     if not path:
-        return None
+        return session
     expanded = os.path.expanduser(path)
     if not os.path.exists(expanded):
         print(f'Warning: YOUTUBE_COOKIES_FILE not found at {expanded}, proceeding without cookies.', flush=True)
-        return None
+        return session
     jar = http.cookiejar.MozillaCookieJar(expanded)
     jar.load(ignore_discard=True, ignore_expires=True)
-    session = requests.Session()
     session.cookies = jar
     return session
 
 
 def get_transcript(video_id):
-    client = _build_http_client()
-    api = YouTubeTranscriptApi(http_client=client) if client else YouTubeTranscriptApi()
+    api = YouTubeTranscriptApi(http_client=_build_http_client())
     try:
         return api.fetch(video_id)
     except CouldNotRetrieveTranscript:
@@ -281,7 +293,8 @@ def _fetch_playlist_videos(playlist_name: str, playlist_url: str, count: int) ->
     return videos
 
 
-def _process_video_entry(playlist_name: str, video: dict, out_dir: str, add_delay: bool = False) -> None:
+def _process_video_entry(playlist_name: str, video: dict, out_dir: str,
+                         add_delay: bool = False, dry_run: bool = False) -> None:
     """Fetch and save transcript for a single video entry."""
     video_id = video['id']
     title = video['title']
@@ -292,6 +305,10 @@ def _process_video_entry(playlist_name: str, video: dict, out_dir: str, add_dela
 
     if os.path.exists(filename):
         print(f'[{playlist_name}]   Skipped (already exists)', flush=True)
+        return
+
+    if dry_run:
+        print(f'[{playlist_name}]   Would save: {filename}', flush=True)
         return
 
     if add_delay:
@@ -315,7 +332,7 @@ def _process_video_entry(playlist_name: str, video: dict, out_dir: str, add_dela
     print(f'[{playlist_name}]   Saved to {filename}', flush=True)
 
 
-def process_video(video_url, name, out_dir):
+def process_video(video_url, name, out_dir, dry_run: bool = False):
     vid_id = _video_id(video_url)
     svc = YouTubeService(_get_api_key())
 
@@ -328,13 +345,17 @@ def process_video(video_url, name, out_dir):
     print(f'[{name}] Title: {title}', flush=True)
     print(f'[{name}] Video ID: {vid_id}', flush=True)
 
-    os.makedirs(out_dir, exist_ok=True)
     filename = os.path.join(out_dir, f'{safe_filename(title)}.md')
 
     if os.path.exists(filename):
         print(f'[{name}] Skipped (already exists): {filename}', flush=True)
         return
 
+    if dry_run:
+        print(f'[{name}] Would save: {filename}', flush=True)
+        return
+
+    os.makedirs(out_dir, exist_ok=True)
     with Spinner(f'[{name}] Fetching transcript...'):
         transcript = get_transcript(vid_id)
     body = format_transcript(transcript)
@@ -355,18 +376,21 @@ def main():
     parser.add_argument('--video', help='Single video URL or ID to fetch transcript for')
     parser.add_argument('--name', default='Podcast', help='Name for the playlist/video when using --playlist or --video')
     parser.add_argument('--out', default=_get_out_dir(), help='Output directory (default: ~/scm-coe/raw/transcripts/podcast)')
+    parser.add_argument('--dry-run', action='store_true',
+                        help='Fetch metadata only; print what would be saved without fetching transcripts or writing files')
     args = parser.parse_args()
 
     if args.video:
-        process_video(args.video, args.name, args.out)
+        process_video(args.video, args.name, args.out, dry_run=args.dry_run)
         return
 
     if args.playlist:
         fetch_count = _get_fetch_count()
         videos = _fetch_playlist_videos(args.name, args.playlist, fetch_count)
-        os.makedirs(args.out, exist_ok=True)
+        if not args.dry_run:
+            os.makedirs(args.out, exist_ok=True)
         for i, video in enumerate(videos):
-            _process_video_entry(args.name, video, args.out, add_delay=(i > 0))
+            _process_video_entry(args.name, video, args.out, add_delay=(i > 0), dry_run=args.dry_run)
         return
 
     playlists = load_playlists()
@@ -387,14 +411,16 @@ def main():
             print(f'[{entry["name"]}] Error fetching playlist: {e}', flush=True)
 
     # Phase 2: round-robin by episode position (newest first across all playlists, then second newest, etc.)
-    os.makedirs(args.out, exist_ok=True)
+    if not args.dry_run:
+        os.makedirs(args.out, exist_ok=True)
     first_transcript = True
     for i in range(fetch_count):
         for name, videos in playlist_videos:
             if i >= len(videos):
                 continue
             try:
-                _process_video_entry(name, videos[i], args.out, add_delay=not first_transcript)
+                _process_video_entry(name, videos[i], args.out, add_delay=not first_transcript,
+                                     dry_run=args.dry_run)
                 first_transcript = False
             except Exception as e:  # pylint: disable=broad-except
                 print(f'[{name}] Error processing episode {i + 1}: {e}', flush=True)

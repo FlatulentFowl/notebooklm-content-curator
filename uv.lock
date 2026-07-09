@@ -456,6 +456,7 @@ dependencies = [
     { name = "google-auth-oauthlib" },
     { name = "python-dateutil" },
     { name = "python-dotenv" },
+    { name = "requests" },
     { name = "youtube-transcript-api" },
 ]
 
@@ -477,6 +478,7 @@ requires-dist = [
     { name = "pylint", marker = "extra == 'dev'" },
     { name = "python-dateutil", specifier = ">=2.8.2" },
     { name = "python-dotenv", specifier = ">=1.2.2" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "youtube-transcript-api", specifier = ">=1.2.4" },
 ]
 provides-extras = ["dev"]

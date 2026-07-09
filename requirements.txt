@@ -262,6 +262,7 @@ requests==2.33.1 \
     --hash=sha256:4e6d1ef462f3626a1f0a0a9c42dd93c63bad33f9f1c1937509b8c5c8718ab56a
     # via
     #   google-api-core
+    #   productivity-agent
     #   requests-oauthlib
     #   youtube-transcript-api
 requests-oauthlib==2.0.0 \
@@ -283,8 +284,4 @@ urllib3==2.6.3 \
 youtube-transcript-api==1.2.4 \
     --hash=sha256:03878759356da5caf5edac77431780b91448fb3d8c21d4496015bdc8a7bc43ff \
     --hash=sha256:b72d0e96a335df599d67cee51d49e143cff4f45b84bcafc202ff51291603ddcd
-    # via productivity-agent
-yt-dlp==2026.3.17 \
-    --hash=sha256:32992db94303a8a5d211a183f2174834fe7f8c29d83ed2e7a324eae97a8f26d8 \
-    --hash=sha256:ba7aa31d533f1ffccfe70e421596d7ca8ff0bf1398dc6bb658b7d9dec057d2c9
     # via productivity-agent

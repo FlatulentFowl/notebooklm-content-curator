@@ -6,7 +6,7 @@ Usage:
   python3 src/prod_agent.py meet [--date DATE] [--dry-run]
   python3 src/prod_agent.py tasks [--dry-run]
   python3 src/prod_agent.py notebooklm [--dry-run]
-  python3 src/prod_agent.py podcast [--playlist URL] [--video URL] [--name NAME] [--out DIR]
+  python3 src/prod_agent.py podcast [--playlist URL] [--video URL] [--name NAME] [--out DIR] [--dry-run]
 """
 
 import argparse
@@ -52,11 +52,12 @@ def _podcast(args):
         extra += ['--name', name]
     if getattr(args, 'out', None):
         extra += ['--out', args.out]
+    if getattr(args, 'dry_run', False):
+        extra.append('--dry-run')
     return _run('tools/tool_podcast.py', extra)
 
 # pylint: disable=E0001
 def _all(args):
-    dry_run = getattr(args, 'dry_run', False)
     codes = []
 
     print('=== meet ===')
@@ -68,11 +69,8 @@ def _all(args):
     print('\n=== notebooklm ===')
     codes.append(_notebooklm(args))
 
-    if dry_run:
-        print('\n=== podcast === (skipped in dry-run — podcast has no dry-run mode)')
-    else:
-        print('\n=== podcast ===')
-        codes.append(_podcast(args))
+    print('\n=== podcast ===')
+    codes.append(_podcast(args))
 
     return max(codes) if codes else 0
 
@@ -97,7 +95,7 @@ def main():
 
     p_all = sub.add_parser('all', help='Run all agents in sequence')
     p_all.add_argument('--dry-run', action='store_true',
-                       help='Dry-run meet, tasks, and notebooklm (podcast is skipped in dry-run)')
+                       help='Dry-run all agents: print what would be created without writing anything')
 
     p_meet = sub.add_parser('meet', help='Google Meet Gemini notes → Tasks')
     p_meet.add_argument('--date', default=None,
@@ -116,6 +114,7 @@ def main():
     p_pod.add_argument('--name', default='Podcast',
                        help='Name label when using --playlist or --video')
     p_pod.add_argument('--out', help='Output directory (default: ~/scm-coe/raw/transcripts/podcast)')
+    p_pod.add_argument('--dry-run', action='store_true')
 
     args = parser.parse_args()
 
