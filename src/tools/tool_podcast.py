@@ -51,17 +51,30 @@ class YouTubeService:
         self._svc = build('youtube', 'v3', developerKey=api_key)
 
     def get_latest_playlist_videos(self, playlist_id: str, count: int = 3) -> list[dict]:
-        """Fetch up to 50 items, return the `count` most recently published."""
-        try:
-            resp = self._svc.playlistItems().list(
-                part='snippet,contentDetails',
-                playlistId=playlist_id,
-                maxResults=50,
-            ).execute()
-        except HttpError as e:
-            raise RuntimeError(f'YouTube API error fetching playlist {playlist_id}: {e.status_code} {e.reason}') from e
+        """Fetch all items (paginated) and return the `count` most recently published.
 
-        items = resp.get('items', [])
+        Playlist order from the API is insertion order, not chronological, so a
+        newly added episode can land anywhere in the list -- pagination is required
+        to find the true most-recent items, not just the first page.
+        """
+        items = []
+        page_token = None
+        while True:
+            try:
+                resp = self._svc.playlistItems().list(
+                    part='snippet,contentDetails',
+                    playlistId=playlist_id,
+                    maxResults=50,
+                    pageToken=page_token,
+                ).execute()
+            except HttpError as e:
+                raise RuntimeError(f'YouTube API error fetching playlist {playlist_id}: {e.status_code} {e.reason}') from e
+
+            items.extend(resp.get('items', []))
+            page_token = resp.get('nextPageToken')
+            if not page_token:
+                break
+
         if not items:
             raise RuntimeError(f'No videos found in playlist: {playlist_id}')
 
