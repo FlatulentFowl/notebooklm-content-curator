@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "0.*"]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # security-scan.py inspects full git history
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Run tests
+        run: uv run pytest -q
+
+      - name: Lint refactored modules
+        run: uv run pylint src/utils src/services src/tools/tool_podcast.py
+
+      - name: Security scan
+        # Default mode fails only on CRITICAL findings; known HIGH history
+        # findings are documented in docs/DECISIONS.md.
+        run: uv run scripts/security-scan.py

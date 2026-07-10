@@ -28,7 +28,7 @@
 
 ### **External Ingestion Services**
 
-* \[ \] **Podcast Ingestion:** Refactor src/tools/tool_podcast.py into a modular PodcastIngestionService.  
+* \[x\] **Podcast Ingestion:** Refactor src/tools/tool_podcast.py into a modular PodcastIngestionService. *(src/services/ingestion_service.py + src/utils/youtube.py; tool_podcast.py is now a thin CLI. Also added: HTTP timeout, API retries, --dry-run, pytest suite, CI workflow.)*  
 * \[ \] **NotebookLM Sync:** Refactor src/tools/tool_notebooklm.py into a modular NotebookLMService.
 
 ### **Orchestration Updates**
@@ -41,4 +41,4 @@
 * \[ \] Implement central AgentController to dynamically invoke Phase 1 services based on context (e.g., calendar events, incoming emails).  
 * \[ \] Add monitoring and logging for autonomous agent decisions.
 
-*Last Updated: \[Insert Date\]*
+*Last Updated: 2026-07-09*
